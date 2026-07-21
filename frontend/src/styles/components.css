@@ -26,3 +26,12 @@
 .wb-collapse-btn:hover {
   background: color-mix(in srgb, var(--wb-color-text) 6%, transparent);
 }
+
+/* QR 생성기 — 카드 아이콘 버튼(개별 삭제 × / PNG 다운로드) hover */
+.wb-qr-iconbtn {
+  transition: background 0.12s, color 0.12s;
+}
+.wb-qr-iconbtn:hover:not(:disabled) {
+  background: var(--wb-color-accent-100);
+  color: var(--wb-color-accent-700);
+}

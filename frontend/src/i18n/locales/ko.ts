@@ -33,6 +33,22 @@ export const ko = {
   noresult_title: '검색 결과가 없습니다',
   noresult_body: '“{{query}}”와(과) 일치하는 도구가 없습니다.',
   clear_search: '검색 지우기',
+  // QR 코드 생성기
+  qr_single_ph: '한 줄 텍스트 — 입력값 그대로 인코딩',
+  qr_add: '추가',
+  qr_bulk_ph: '여러 줄 입력 — 각 줄이 QR 하나 (빈 줄 무시)',
+  qr_bulk_add: '일괄 생성',
+  qr_trim: '앞뒤 공백 제거(trim)',
+  qr_clear_all: '전체 삭제',
+  qr_count: '{{n}} / {{cap}}',
+  qr_at_cap: '상한에 도달했습니다. 기존 코드를 삭제하면 더 추가할 수 있습니다.',
+  qr_overflow: '공간이 부족해 {{n}}개는 추가되지 않았습니다.',
+  qr_spec: '흑백 전용 · 여백 4모듈 · 오류정정 M · 최소 160px',
+  qr_remove: '삭제',
+  qr_download: 'PNG 저장',
+  qr_error: '인코딩 실패 (데이터 과대)',
+  qr_empty_title: '아직 생성된 QR이 없습니다',
+  qr_empty_body: '위 입력창에 텍스트를 넣고 추가하세요. 입력한 값은 변형 없이 그대로 인코딩됩니다.',
 }
 
 export type ShellStrings = typeof ko

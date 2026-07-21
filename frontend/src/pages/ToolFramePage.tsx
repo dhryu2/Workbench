@@ -1,12 +1,13 @@
-// 도구 진입 프레임(`/tools/:toolId`) — 브레드크럼 + 타이틀 행 + 빈 placeholder.
-// 개별 도구 콘텐츠는 범위 밖: placeholder 자리에 이후 각 도구 컴포넌트가 마운트된다.
-import { ArrowLeft, LayoutGrid, Star } from 'lucide-react'
+// 도구 진입 프레임(`/tools/:toolId`) — 브레드크럼 + 타이틀 행 + 도구 콘텐츠.
+// 콘텐츠는 레지스트리(TOOL_COMPONENTS)에 등록된 전용 화면을, 미등록 도구는 공통 placeholder를 렌더한다.
+import { ArrowLeft, Star } from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { Blueprint } from '../components/Blueprint'
 import { categoryName, toolById } from '../data/catalog'
 import { Icon, ToolIcon } from '../lib/icons'
+import { TOOL_COMPONENTS } from '../tools/registry'
+import { ToolPlaceholder } from './ToolPlaceholder'
 import { useLang } from '../lib/useLang'
 import { useWorkbench } from '../lib/workbench-context'
 
@@ -27,6 +28,8 @@ export function ToolFramePage() {
   if (!tool) return <Navigate to="/" replace />
 
   const fav = isFavorite(tool.id)
+  // 등록된 전용 화면(예: QR 생성기). 없으면 공통 placeholder를 렌더한다.
+  const ToolComponent = TOOL_COMPONENTS[tool.id]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -92,57 +95,8 @@ export function ToolFramePage() {
         </div>
       </div>
 
-      {/* 콘텐츠 placeholder — 각 도구 컴포넌트가 마운트될 자리 */}
-      <div style={{ flex: 1, padding: '26px 34px', minHeight: 0 }}>
-        <Blueprint
-          style={{
-            height: '100%',
-            minHeight: 280,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            gap: 8,
-            color: 'color-mix(in srgb, var(--wb-color-text) 50%, transparent)',
-            background:
-              'repeating-linear-gradient(-45deg, transparent, transparent 11px, color-mix(in srgb, var(--wb-color-text) 3%, transparent) 11px, color-mix(in srgb, var(--wb-color-text) 3%, transparent) 12px)',
-          }}
-        >
-          <span
-            style={{
-              display: 'flex',
-              color: 'color-mix(in srgb, var(--wb-color-text) 35%, transparent)',
-              marginBottom: 6,
-            }}
-          >
-            <Icon icon={LayoutGrid} size={30} />
-          </span>
-          <div
-            style={{
-              fontFamily: 'var(--wb-font-heading)',
-              fontWeight: 600,
-              fontSize: 18,
-              color: 'color-mix(in srgb, var(--wb-color-text) 70%, transparent)',
-            }}
-          >
-            {t('tool_placeholder_title')}
-          </div>
-          <p style={{ fontSize: 14, margin: 0 }}>{t('tool_placeholder_body')}</p>
-          <code
-            style={{
-              fontSize: 12,
-              padding: '4px 10px',
-              marginTop: 6,
-              background: 'var(--wb-color-surface)',
-              border: '1px solid var(--wb-color-divider)',
-              color: 'var(--wb-color-accent-700)',
-            }}
-          >
-            /tools/{tool.id}
-          </code>
-        </Blueprint>
-      </div>
+      {/* 콘텐츠 영역 — 등록된 전용 화면, 없으면 공통 placeholder */}
+      {ToolComponent ? <ToolComponent /> : <ToolPlaceholder toolId={tool.id} />}
     </div>
   )
 }
