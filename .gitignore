@@ -1,0 +1,20 @@
+# === OS / editor ===
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# === OMC operational state ===
+.omc/
+
+# === Node / frontend ===
+node_modules/
+dist/
+*.local
+.env
+.env.*
+
+# === Java / Spring backend ===
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
