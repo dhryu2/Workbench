@@ -55,4 +55,4 @@ cd frontend && npm run build     # static assets in frontend/dist/
 
 ## License
 
-TBD
+[MIT](LICENSE)
