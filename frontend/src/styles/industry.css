@@ -1,0 +1,132 @@
+/* Industry 디자인 시스템 컴포넌트 클래스 — 원본 styles.css를 우리 앱 토큰(--wb-*)으로 재매핑.
+   와이어프레임/블루프린트 미학: 사각 모서리(radius 0), 헤어라인 보더, 4모서리 "+" 등록 마크,
+   투명 라인 드로잉(예외: primary 버튼만 액센트 채움). */
+
+/* ── 블루프린트 프레임 + 코너 등록 마크 ── */
+.wb-blueprint {
+  position: relative;
+  border: 1px solid var(--wb-color-divider);
+  border-radius: 0;
+}
+.wb-blueprint > .wb-corner {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  color: color-mix(in srgb, var(--wb-color-text) 55%, transparent);
+}
+.wb-blueprint > .wb-corner::before,
+.wb-blueprint > .wb-corner::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+.wb-blueprint > .wb-corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+.wb-blueprint > .wb-corner::after { top: 5px; left: 0; width: 100%; height: 1px; }
+.wb-blueprint > .wb-corner.tl { top: -6px; left: -6px; }
+.wb-blueprint > .wb-corner.tr { top: -6px; right: -6px; }
+.wb-blueprint > .wb-corner.bl { bottom: -6px; left: -6px; }
+.wb-blueprint > .wb-corner.br { bottom: -6px; right: -6px; }
+
+/* ── 버튼 ── */
+.wb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--wb-font-heading);
+  font-weight: var(--wb-font-heading-weight);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--wb-color-text);
+  background: transparent;
+  border: 1px solid var(--wb-color-divider); /* 블루프린트: 사각 헤어라인 */
+  border-radius: 0;
+  padding: var(--wb-space-2) calc(var(--wb-space-3) * 1.2);
+}
+.wb-btn svg { display: block; }
+.wb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.wb-btn-primary {
+  background: var(--wb-color-accent);
+  color: var(--wb-color-bg);
+  border-color: var(--wb-color-accent);
+}
+.wb-btn-primary:hover { background: var(--wb-color-accent-600); }
+.wb-btn-primary:active { background: var(--wb-color-accent-700); }
+.wb-btn-secondary { border-color: var(--wb-color-divider); }
+.wb-btn-secondary:hover { background: color-mix(in srgb, var(--wb-color-text) 7%, transparent); }
+.wb-btn-secondary:active { background: color-mix(in srgb, var(--wb-color-text) 14%, transparent); }
+.wb-btn-ghost {
+  color: var(--wb-color-accent);
+  border-color: transparent;
+  padding-inline: var(--wb-space-1);
+}
+.wb-btn-ghost:hover { background: color-mix(in srgb, var(--wb-color-accent) 10%, transparent); }
+.wb-btn-ghost:active { background: color-mix(in srgb, var(--wb-color-accent) 18%, transparent); }
+
+/* ── 인풋 ── */
+.wb-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--wb-color-text);
+  caret-color: var(--wb-color-accent);
+  background: var(--wb-color-surface);
+  border: 1px solid var(--wb-color-divider);
+  border-radius: 0; /* 블루프린트: 사각 */
+}
+.wb-input:hover { border-color: color-mix(in srgb, var(--wb-color-text) 45%, transparent); }
+.wb-input:focus-visible { border-color: var(--wb-color-accent); outline-offset: 0; }
+
+/* ── 카드 ── */
+.wb-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wb-space-2);
+  padding: var(--wb-space-3);
+  border-radius: 0; /* 블루프린트: 사각 */
+  background: transparent; /* 투명 라인 드로잉 */
+  border: 1px solid var(--wb-color-divider);
+}
+.wb-card-title {
+  font-family: var(--wb-font-heading);
+  font-weight: var(--wb-font-heading-weight);
+  font-size: 17px;
+  line-height: 1.2;
+}
+.wb-card-body {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.8;
+  flex: 1;
+}
+.wb-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--wb-color-text) 50%, transparent);
+}
+
+/* ── 태그 ── */
+.wb-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: 0; /* 블루프린트: 사각 */
+}
+.wb-tag-neutral { background: var(--wb-color-neutral-100); color: var(--wb-color-neutral-800); }
+.wb-tag-accent { background: var(--wb-color-accent-100); color: var(--wb-color-accent-800); }
+
+/* ── 엘리베이션 ── */
+.wb-elev-sm { box-shadow: var(--wb-shadow-sm); }
+.wb-elev-md { box-shadow: var(--wb-shadow-md); }
+.wb-elev-lg { box-shadow: var(--wb-shadow-lg); }
+
+/* ── 유틸 ── */
+.wb-text-muted { color: color-mix(in srgb, var(--wb-color-text) 55%, transparent); }

@@ -1,0 +1,56 @@
+/* 전역 베이스 — 폰트, 리셋, 포커스 링, 스크롤바, 셸 애니메이션 키프레임. */
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--wb-color-bg);
+  color: var(--wb-color-text);
+  font-family: var(--wb-font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--wb-font-heading);
+  font-weight: var(--wb-font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+p { margin: 0; }
+
+/* ── 포커스 링 (디자인 시스템 기본) ── */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--wb-color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--wb-color-accent) 30%, transparent); }
+
+/* ── 커스텀 스크롤바 ── */
+.wb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+.wb-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--wb-color-text) 18%, transparent); }
+.wb-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ── 셸 애니메이션 ── */
+@keyframes wb-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wb-pop {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

@@ -1,0 +1,28 @@
+/* 인터랙션 클래스 — 인라인 스타일로 표현 불가한 :hover 상태들. 측정값은 README 기준. */
+
+/* 상단 바 전역 검색 트리거 */
+.wb-search-trigger:hover {
+  border-color: color-mix(in srgb, var(--wb-color-text) 45%, transparent);
+}
+
+/* 도구 카드 hover: 액센트 보더 + 살짝 떠오름 */
+.wb-tool-card {
+  transition: transform 0.14s, border-color 0.14s;
+}
+.wb-tool-card:hover {
+  border-color: var(--wb-color-accent);
+  transform: translateY(-2px);
+}
+
+/* 카드/도구 헤더 즐겨찾기 버튼 hover */
+.wb-fav-btn {
+  transition: background 0.12s;
+}
+.wb-fav-btn:hover {
+  background: color-mix(in srgb, var(--wb-color-text) 7%, transparent);
+}
+
+/* 사이드바 접기 버튼 hover */
+.wb-collapse-btn:hover {
+  background: color-mix(in srgb, var(--wb-color-text) 6%, transparent);
+}
