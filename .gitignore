@@ -29,6 +29,29 @@ coverage/
 .env.*
 !.env.example
 
+# ============================================================
+#  Deployment — secrets & credentials (never commit)
+# ============================================================
+# 운영 시크릿(.env.production 등)은 위 .env.* 로 이미 무시되지만, 아래를 명시해 실수 커밋 방지
+.env.production
+.env.production.*
+# SSH 개인키 / 인증서 / 자격증명
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+id_ecdsa
+*_rsa
+*_ed25519
+authorized_keys
+known_hosts
+# 배포 산출물 / 원격에 전송되는 임시 compose 렌더링
+docker-compose.override.yml
+*.tar
+*.tar.gz
+
 # logs & debug
 logs/
 *.log
@@ -64,3 +87,4 @@ out/
 
 # Claude Code instructions (local only)
 CLAUDE.md
+docs
