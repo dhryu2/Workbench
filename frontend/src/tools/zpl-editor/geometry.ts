@@ -1,5 +1,6 @@
 // 순수 기하/파생 크기 헬퍼 — support.js `_norm`/`_QMOD`/`_bcW`/`_textH`/`_cellRect`/`_mergedRect` 와
 // 수식·반올림까지 동일하게 재현한다. React/DOM 의존 없음.
+import qrcode from 'qrcode-generator'
 import { DPI_BY_DPMM } from './types'
 import type {
   Element,
@@ -9,6 +10,7 @@ import type {
   TableElement,
   Merge,
   Dpmm,
+  Ecc,
   Unit,
 } from './types'
 
@@ -30,10 +32,33 @@ export function toDots(v: number, unit: Unit, dpi: number): number {
   return Math.max(1, Math.round(unit === 'mm' ? (v / 25.4) * dpi : v * dpi))
 }
 
-// QR 모듈 수: 데이터 길이 구간별 고정값.
+// QR 모듈 수(추정 테이블): 데이터 길이 구간별 고정값 — 인코딩 실패 시 폴백 전용.
 export function qmod(data: string): number {
   const n = String(data || '').length
   return n > 60 ? 33 : n > 25 ? 29 : n > 12 ? 25 : 21
+}
+
+// 실제 QR 모듈 수 — qrcode-generator 로 (data, ecc) 를 실제 인코딩해 버전을 결정한다.
+// norm() 이 렌더마다 호출하므로 (data, ecc) 키로 캐시하고, 인코딩 실패 시 qmod 로 폴백.
+const qrModCache = new Map<string, number>()
+export function qrModules(data: string, ecc: Ecc): number {
+  const key = ecc + '|' + (data || '')
+  const hit = qrModCache.get(key)
+  if (hit != null) return hit
+  let n: number
+  try {
+    // ESM 빌드 기본 stringToBytes 는 Latin1 절단 — 한글 안전하게 UTF-8 로 교체(qr-encode.ts 와 동일 처리)
+    qrcode.stringToBytes = (s: string) => Array.from(new TextEncoder().encode(s))
+    const qr = qrcode(0, ecc)
+    qr.addData(data || '', 'Byte')
+    qr.make()
+    n = qr.getModuleCount()
+  } catch {
+    n = qmod(data)
+  }
+  if (qrModCache.size > 256) qrModCache.clear()
+  qrModCache.set(key, n)
+  return n
 }
 
 // 1D 바코드 파생 폭(dot). m=module. 심볼로지별 규격 폭 근사(README 수식).
@@ -51,9 +76,9 @@ export function textH(el: TextElement): number {
   return Math.round((el.font || 30) * 1.18 * Math.max(1, lines))
 }
 
-// QR 파생 변 길이(정사각): 모듈수 × 배율(기본 5).
+// QR 파생 변 길이(정사각): 실제 모듈수 × 배율(기본 5).
 export function qrSize(el: QrElement): number {
-  return qmod(el.data) * (el.mag || 5)
+  return qrModules(el.data, el.ecc || 'M') * (el.mag || 5)
 }
 
 // 표 전체 폭/높이 = 열폭 합 / 행높이 합.

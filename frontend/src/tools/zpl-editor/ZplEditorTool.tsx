@@ -1,6 +1,6 @@
 // ZPL 에디터 최상위 뷰 — 툴바 / (캔버스 또는 미리보기 · 코드 패널 · 속성 패널) / 상태바 + 다이얼로그.
 import { useTranslation } from 'react-i18next'
-import { Canvas } from './Canvas'
+import { EditorStage } from './canvas/EditorStage'
 import { CodePanel } from './CodePanel'
 import { PreviewPane } from './PreviewPane'
 import { PropertiesPanel } from './PropertiesPanel'
@@ -21,7 +21,7 @@ export function ZplEditorTool() {
       <Toolbar api={api} />
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {z.mode === 'edit' ? <Canvas api={api} /> : <PreviewPane api={api} />}
+        {z.mode === 'edit' ? <EditorStage api={api} /> : <PreviewPane api={api} />}
         {z.codeOpen && <CodePanel api={api} />}
         <PropertiesPanel api={api} />
       </div>

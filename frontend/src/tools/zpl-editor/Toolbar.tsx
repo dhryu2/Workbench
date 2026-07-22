@@ -1,8 +1,7 @@
-// ZPL 에디터 툴바 — INSERT 버튼 · 편집 조작 · 설정 · 줌 · 렌더 배지 · 모드 · 코드/가져오기.
+// ZPL 에디터 툴바 — INSERT 버튼 · 편집 조작 · 설정 · 줌 · 모드 · 코드/가져오기.
+// (렌더 배지는 v2 에서 제거 — 캔버스 자체가 권위 있는 WYSIWYG 렌더러다.)
 import {
-  AlertTriangle,
   BoxSelect,
-  Check,
   Circle,
   ClipboardPaste,
   Code,
@@ -14,7 +13,6 @@ import {
   Pencil,
   Plus,
   QrCode,
-  RefreshCw,
   ScanLine,
   Slash,
   SlidersHorizontal,
@@ -57,32 +55,6 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
     { type: 'line', icon: Minus, label: t('z_line') },
     { type: 'diagonal', icon: Slash, label: t('z_diagonal') },
   ]
-
-  const render = z.render
-  const badge =
-    render === 'rendering'
-      ? {
-          icon: <Icon icon={RefreshCw} size={14} className="wb-zpl-spin" />,
-          label: t('z_rendering'),
-          color: 'var(--wb-color-accent-700)',
-          bg: 'var(--wb-color-accent-100)',
-          border: 'var(--wb-color-accent)',
-        }
-      : render === 'stale'
-        ? {
-            icon: <Icon icon={AlertTriangle} size={14} />,
-            label: t('z_stale'),
-            color: '#8a6d3a',
-            bg: 'color-mix(in srgb, #caa14a 20%, transparent)',
-            border: 'color-mix(in srgb, #caa14a 55%, transparent)',
-          }
-        : {
-            icon: <Icon icon={Check} size={14} />,
-            label: t('z_synced'),
-            color: 'var(--wb-color-accent-700)',
-            bg: 'transparent',
-            border: 'var(--wb-color-divider)',
-          }
 
   // 편집 조작 버튼(undo/redo/copy/paste)
   const editOp = (icon: LucideIcon, title: string, onClick: () => void, disabled: boolean, first: boolean) => (
@@ -197,12 +169,6 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
 
       {/* 스페이서 */}
       <div style={{ flex: 1, minWidth: 12 }} />
-
-      {/* 렌더 상태 배지 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: HEADING, fontWeight: 600, padding: '4px 10px', whiteSpace: 'nowrap', color: badge.color, background: badge.bg, border: '1px solid ' + badge.border }}>
-        {badge.icon}
-        {badge.label}
-      </div>
 
       {/* 모드 세그먼트 */}
       <div style={{ display: 'flex', border: '1px solid var(--wb-color-divider)', height: 32 }}>

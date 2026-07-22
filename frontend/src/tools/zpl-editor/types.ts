@@ -162,7 +162,6 @@ export type Element =
 export type BorderableElement = TextElement | BarcodeElement | QrElement | ImageElement
 
 // ── 에디터 상태 ──
-export type RenderState = 'synced' | 'rendering' | 'stale'
 export type EditorMode = 'edit' | 'preview'
 
 export interface CellRef {
@@ -197,7 +196,6 @@ export interface ZplState {
   tableDialog: boolean
   tableRows: string
   tableCols: string
-  render: RenderState
   dragId: string | null
   drag: DragGhost | null
   mode: EditorMode

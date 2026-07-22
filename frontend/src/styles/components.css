@@ -37,7 +37,7 @@
 }
 
 /* ── ZPL 에디터 ── */
-/* 렌더 배지 회전 아이콘 (rendering 상태) */
+/* 회전 스피너 — 미리보기(Labelary) 로딩 아이콘 */
 @keyframes wb-spin {
   to { transform: rotate(360deg); }
 }
@@ -67,20 +67,11 @@
 .wb-zpl-codeline {
   cursor: pointer;
 }
-/* 캔버스 요소 래퍼 — 비선택 hover 시 점선 아웃라인 */
-.wb-zpl-el:hover {
-  outline: 1.5px dashed var(--wb-color-accent);
-  outline-offset: 2px;
-}
 /* 임계값 슬라이더 — 액센트 컬러 */
 .wb-zpl-range {
   width: 100%;
   accent-color: var(--wb-color-accent);
   cursor: pointer;
-}
-/* 표 열/행 구분선 드래그 바 — hover 시 안쪽 액센트 바 강조 */
-.wb-zpl-divbar:hover > i {
-  opacity: 0.9 !important;
 }
 /* 네이티브 select — wb-input 룩앤필 + 포인터 */
 .wb-zpl-select {

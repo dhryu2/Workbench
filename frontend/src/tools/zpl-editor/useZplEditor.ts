@@ -1,7 +1,7 @@
 // ZPL 에디터 상태 훅 — 프로토타입(support.js)의 ZPL 관련 메서드/상호작용 수식을 React 훅으로 재구현.
 // 순수 도메인 로직(파생 크기·ZPL 생성)은 엔진 모듈(geometry/zpl-generate)을 그대로 import 한다.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { ChangeEvent } from 'react'
 import type { TFunction } from 'i18next'
 import { HISTORY_MAX, ZOOM_MAX, ZOOM_MIN } from './types'
 import type { Dpmm, Element, Merge, TableCell, TableElement, Unit, ZplState } from './types'
@@ -9,6 +9,17 @@ import { dpiFor, mergeAt, norm, toDots } from './geometry'
 import { buildZpl } from './zpl-generate'
 import { SEED_ELEMENTS, SEED_SPEC } from './seed'
 import { makeEmblem, rasterize1bit } from './image-util'
+
+// 포인터 다운 이벤트의 최소 형태 — React 합성 이벤트와 Konva 의 원시 PointerEvent(e.evt)를
+// 모두 구조적으로 수용한다(§5.4: 수식/임계/히스토리 의미는 불변, 이벤트 타입만 중립화).
+export interface PointerLike {
+  clientX: number
+  clientY: number
+  ctrlKey: boolean
+  metaKey: boolean
+  stopPropagation: () => void
+  preventDefault: () => void
+}
 
 // ── 요소 필드 패치(부분 갱신) 타입 ── 유니온 요소에 좁은 캐스트로 되돌린다.
 type Patch = Record<string, unknown>
@@ -154,7 +165,6 @@ function makeInitialState(): ZplState {
     tableDialog: false,
     tableRows: '3',
     tableCols: '3',
-    render: 'synced',
     dragId: null,
     drag: null,
     mode: 'edit',
@@ -208,24 +218,11 @@ export function useZplEditor(t: TFunction) {
   })
 
   const editSig = useRef<string | null>(null)
-  const rt1 = useRef<number | undefined>(undefined)
-  const rt2 = useRef<number | undefined>(undefined)
   const copyTimer = useRef<number | undefined>(undefined)
   const previewUrlRef = useRef<string | null>(null)
 
   const patchZ = useCallback((p: Partial<ZplState>) => {
     setZ((s) => ({ ...s, ...p }))
-  }, [])
-
-  // ── 렌더 디바운스: stale → 300ms → rendering → 620ms → synced ──
-  const touchRender = useCallback(() => {
-    window.clearTimeout(rt1.current)
-    window.clearTimeout(rt2.current)
-    setZ((s) => ({ ...s, render: 'stale' }))
-    rt1.current = window.setTimeout(() => {
-      setZ((s) => ({ ...s, render: 'rendering' }))
-      rt2.current = window.setTimeout(() => setZ((s) => ({ ...s, render: 'synced' })), 620)
-    }, 300)
   }, [])
 
   // ── 히스토리 push(편집 전 스냅샷). sig 로 연속 편집을 1개 스냅샷으로 합침. ──
@@ -279,8 +276,7 @@ export function useZplEditor(t: TFunction) {
         future: [...s.future, cur],
       }
     })
-    touchRender()
-  }, [touchRender])
+  }, [])
   const redo = useCallback(() => {
     editSig.current = null
     setZ((s) => {
@@ -299,8 +295,7 @@ export function useZplEditor(t: TFunction) {
         past: [...s.past, cur],
       }
     })
-    touchRender()
-  }, [touchRender])
+  }, [])
 
   // ── copy / paste ──
   const copySel = useCallback(() => {
@@ -319,8 +314,7 @@ export function useZplEditor(t: TFunction) {
       const el = patchEl(clip, { id, x: (clip.x || 0) + 24, y: (clip.y || 0) + 24 })
       return { ...s, els: [...s.els, el], sel: id, selCell: null, selCells: [], next: s.next + 1 }
     })
-    touchRender()
-  }, [pushPast, touchRender])
+  }, [pushPast])
 
   // ── 삽입 ──
   const openTableDialog = useCallback(() => patchZ({ tableDialog: true, tableRows: '3', tableCols: '3' }), [patchZ])
@@ -355,9 +349,8 @@ export function useZplEditor(t: TFunction) {
         else el = { id, type: 'line', x, y, dir: 'h', len: 400, t: 4 }
         return { ...s, els: [...s.els, el], sel: id, selCell: null, selCells: [], next: s.next + 1 }
       })
-      touchRender()
     },
-    [openTableDialog, pushPast, touchRender],
+    [openTableDialog, pushPast],
   )
 
   const deleteSel = useCallback(() => {
@@ -365,8 +358,7 @@ export function useZplEditor(t: TFunction) {
     if (!s.sel) return
     pushPast()
     setZ((st) => ({ ...st, els: st.els.filter((e) => e.id !== st.sel), sel: null, selCell: null, selCells: [] }))
-    touchRender()
-  }, [pushPast, touchRender])
+  }, [pushPast])
 
   // ── 이미지 재래스터(업로드/리사이즈/임계값·디더 변경 후) ──
   // setTimeout(0) 으로 커밋 이후(zRef 최신화 후) 최신 w/h/threshold 를 읽어 래스터화한다.
@@ -387,7 +379,12 @@ export function useZplEditor(t: TFunction) {
       const id = s.sel
       if (!id) return
       pushPast(id + ':' + key)
-      const v = numeric ? (typeof val === 'number' ? val : parseInt(String(val), 10) || 0) : val
+      let v: string | number | boolean = numeric ? (typeof val === 'number' ? val : parseInt(String(val), 10) || 0) : val
+      // 제약 패리티(§2): ^A0 최소 글리프 높이/폭 10dot, ^BQ 배율 1–10 정수 — 필드 레벨에서도 강제
+      if (typeof v === 'number') {
+        if (key === 'font' || key === 'fontW') v = Math.max(10, v)
+        else if (key === 'mag') v = Math.max(1, Math.min(10, v))
+      }
       mapEls((els) =>
         els.map((e) => {
           if (e.id !== id) return e
@@ -400,9 +397,8 @@ export function useZplEditor(t: TFunction) {
       )
       const el = zRef.current.els.find((e) => e.id === id)
       if (el && el.type === 'image') reraster(id)
-      touchRender()
     },
-    [mapEls, pushPast, reraster, touchRender],
+    [mapEls, pushPast, reraster],
   )
   const toggleBorder = useCallback(() => {
     const el = zRef.current.els.find((e) => e.id === zRef.current.sel)
@@ -421,7 +417,7 @@ export function useZplEditor(t: TFunction) {
 
   // ── 드래그 이동(2px 임계, 고스트, 음수 클램프) ──
   const elPointerDown = useCallback(
-    (id: string, ev: ReactPointerEvent) => {
+    (id: string, ev: PointerLike) => {
       ev.stopPropagation()
       const s = zRef.current
       if (s.mode !== 'edit') return
@@ -446,27 +442,23 @@ export function useZplEditor(t: TFunction) {
           ...st,
           dragId: id,
           drag: { x: nx, y: ny },
-          render: 'stale',
           els: st.els.map((x) => (x.id === id ? patchEl(x, { x: nx, y: ny }) : x)),
         }))
       }
       const up = () => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
-        if (moved) {
-          patchZ({ dragId: null, drag: null })
-          touchRender()
-        } else patchZ({ dragId: null, drag: null })
+        patchZ({ dragId: null, drag: null })
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
     },
-    [patchZ, pushPast, touchRender],
+    [patchZ, pushPast],
   )
 
   // ── 타입별 리사이즈 ──
   const resizeDown = useCallback(
-    (id: string, role: string, ev: ReactPointerEvent) => {
+    (id: string, role: string, ev: PointerLike) => {
       ev.stopPropagation()
       ev.preventDefault()
       const s = zRef.current
@@ -488,22 +480,18 @@ export function useZplEditor(t: TFunction) {
         const patch = applyResize(el0, role, dx, dy)
         setZ((st) => ({
           ...st,
-          render: 'stale',
           els: st.els.map((x) => (x.id === id ? patchEl(x, patch) : x)),
         }))
       }
       const up = () => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
-        if (started) {
-          reraster(id)
-          touchRender()
-        }
+        if (started) reraster(id)
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
     },
-    [pushPast, reraster, touchRender],
+    [pushPast, reraster],
   )
 
   // ── 방향키 넛지 ──
@@ -513,9 +501,8 @@ export function useZplEditor(t: TFunction) {
       if (!id) return
       pushPast('nudge')
       mapEls((els) => els.map((e) => (e.id === id ? patchEl(e, { x: Math.max(0, e.x + dx), y: Math.max(0, e.y + dy) }) : e)))
-      touchRender()
     },
-    [mapEls, pushPast, touchRender],
+    [mapEls, pushPast],
   )
 
   // ── 이미지 업로드 ──
@@ -543,14 +530,13 @@ export function useZplEditor(t: TFunction) {
           pushPast()
           mapEls((els) => els.map((x) => (x.id === id && x.type === 'image' ? { ...x, orig, w, h } : x)))
           reraster(id)
-          touchRender()
         }
         im.src = orig
       }
       rd.readAsDataURL(f)
       ev.target.value = ''
     },
-    [mapEls, pushPast, reraster, touchRender],
+    [mapEls, pushPast, reraster],
   )
 
   // ── 설정(Setup) ──
@@ -571,23 +557,20 @@ export function useZplEditor(t: TFunction) {
         }
         return { ...s, unit: u, w: String(w), h: String(h) }
       })
-      touchRender()
     },
-    [touchRender],
+    [],
   )
   const setDim = useCallback(
     (key: 'w' | 'h', value: string) => {
       patchZ({ [key]: value })
-      touchRender()
     },
-    [patchZ, touchRender],
+    [patchZ],
   )
   const setDpmm = useCallback(
     (value: number) => {
       patchZ({ dpmm: (value || 8) as Dpmm })
-      touchRender()
     },
-    [patchZ, touchRender],
+    [patchZ],
   )
 
   // ── 가져오기(Import) ──
@@ -615,8 +598,7 @@ export function useZplEditor(t: TFunction) {
     // TODO(phase-2): 실제 ZPL 역파서. 현재는 검증만 실제 수행하고 시드 요소를 재생성한다.
     // (역파싱기는 zpl-generate 의 명령 매핑을 역방향으로 구현 — 이 자리에 스왑인)
     setZ((s) => ({ ...s, els: cloneEls(makeInitialState().els), sel: null, importOpen: false, importError: null }))
-    touchRender()
-  }, [patchZ, pushPast, touchRender])
+  }, [patchZ, pushPast])
 
   // ── 표 삽입 ──
   const setTableRows = useCallback((v: string) => patchZ({ tableRows: v }), [patchZ])
@@ -636,12 +618,11 @@ export function useZplEditor(t: TFunction) {
       const el: TableElement = { id, type: 'table', x: 90, y: 120, cols, rows, t: 3, pad: 12, merges: [], cells }
       return { ...s, els: [...s.els, el], sel: id, selCell: null, selCells: [], next: s.next + 1, tableDialog: false }
     })
-    touchRender()
-  }, [pushPast, touchRender])
+  }, [pushPast])
 
   // ── 표 셀 상호작용 ──
   const cellDown = useCallback(
-    (id: string, r: number, c: number, ev: ReactPointerEvent) => {
+    (id: string, r: number, c: number, ev: PointerLike) => {
       ev.stopPropagation()
       const s = zRef.current
       if (s.mode !== 'edit') return
@@ -679,22 +660,19 @@ export function useZplEditor(t: TFunction) {
           ...st,
           dragId: id,
           drag: { x: nx, y: ny },
-          render: 'stale',
           els: st.els.map((x) => (x.id === id ? patchEl(x, { x: nx, y: ny }) : x)),
         }))
       }
       const up = () => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
-        if (moved) {
-          patchZ({ dragId: null, drag: null })
-          touchRender()
-        } else patchZ({ selCell: { r, c }, selCells: [{ r, c }], dragId: null, drag: null })
+        if (moved) patchZ({ dragId: null, drag: null })
+        else patchZ({ selCell: { r, c }, selCells: [{ r, c }], dragId: null, drag: null })
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
     },
-    [patchZ, pushPast, touchRender],
+    [patchZ, pushPast],
   )
   const selectTableWhole = useCallback(() => patchZ({ selCell: null, selCells: [] }), [patchZ])
   const mergeCells = useCallback(() => {
@@ -716,8 +694,7 @@ export function useZplEditor(t: TFunction) {
       ),
     )
     patchZ({ selCell: { r, c }, selCells: [{ r, c }] })
-    touchRender()
-  }, [mapEls, patchZ, pushPast, touchRender])
+  }, [mapEls, patchZ, pushPast])
   const splitCell = useCallback(() => {
     const s = zRef.current
     const sc = s.selCell
@@ -730,15 +707,19 @@ export function useZplEditor(t: TFunction) {
           : e,
       ),
     )
-    touchRender()
-  }, [mapEls, pushPast, touchRender])
+  }, [mapEls, pushPast])
   const setCellField = useCallback(
     (key: string, val: string | number, numeric?: boolean) => {
       const s = zRef.current
       const sc = s.selCell
       if (!sc) return
       const k = sc.r + '_' + sc.c
-      const v = numeric ? (typeof val === 'number' ? val : parseInt(String(val), 10) || 0) : val
+      let v: string | number = numeric ? (typeof val === 'number' ? val : parseInt(String(val), 10) || 0) : val
+      // 셀도 동일 제약(§2): 셀 텍스트는 ^A0(최소 10dot), 셀 QR 은 ^BQ 배율 1–10
+      if (typeof v === 'number') {
+        if (key === 'font') v = Math.max(10, v)
+        else if (key === 'mag') v = Math.max(1, Math.min(10, v))
+      }
       pushPast(s.sel + ':' + k + ':' + key)
       mapEls((els) =>
         els.map((e) => {
@@ -749,9 +730,8 @@ export function useZplEditor(t: TFunction) {
           return { ...e, cells }
         }),
       )
-      touchRender()
     },
-    [mapEls, pushPast, touchRender],
+    [mapEls, pushPast],
   )
   const setCellType = useCallback(
     (val: TableCell['type']) => {
@@ -781,9 +761,8 @@ export function useZplEditor(t: TFunction) {
           return { ...e, cells }
         }),
       )
-      touchRender()
     },
-    [mapEls, pushPast, touchRender],
+    [mapEls, pushPast],
   )
   const setColW = useCallback(
     (i: number, value: string) => {
@@ -798,9 +777,8 @@ export function useZplEditor(t: TFunction) {
           return { ...e, cols }
         }),
       )
-      touchRender()
     },
-    [mapEls, pushPast, touchRender],
+    [mapEls, pushPast],
   )
   const setRowH = useCallback(
     (i: number, value: string) => {
@@ -815,13 +793,12 @@ export function useZplEditor(t: TFunction) {
           return { ...e, rows }
         }),
       )
-      touchRender()
     },
-    [mapEls, pushPast, touchRender],
+    [mapEls, pushPast],
   )
   // 열/행 구분선 드래그 — 인접 두 칸을 합 보존하며 상쇄 이동(각 최소 30).
   const divDown = useCallback(
-    (id: string, i: number, ev: ReactPointerEvent, isCol: boolean) => {
+    (id: string, i: number, ev: PointerLike, isCol: boolean) => {
       ev.stopPropagation()
       ev.preventDefault()
       const s = zRef.current
@@ -843,7 +820,6 @@ export function useZplEditor(t: TFunction) {
         dd = Math.max(-(a - 30), Math.min(b - 30, dd))
         setZ((st) => ({
           ...st,
-          render: 'stale',
           els: st.els.map((e) => {
             if (e.id !== id || e.type !== 'table') return e
             const arr = [...(isCol ? e.cols : e.rows)]
@@ -856,15 +832,14 @@ export function useZplEditor(t: TFunction) {
       const up = () => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
-        if (started) touchRender()
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
     },
-    [pushPast, touchRender],
+    [pushPast],
   )
-  const colDivDown = useCallback((id: string, i: number, ev: ReactPointerEvent) => divDown(id, i, ev, true), [divDown])
-  const rowDivDown = useCallback((id: string, i: number, ev: ReactPointerEvent) => divDown(id, i, ev, false), [divDown])
+  const colDivDown = useCallback((id: string, i: number, ev: PointerLike) => divDown(id, i, ev, true), [divDown])
+  const rowDivDown = useCallback((id: string, i: number, ev: PointerLike) => divDown(id, i, ev, false), [divDown])
 
   // ── 코드 복사(1.4s "Copied") ──
   const copyZpl = useCallback(() => {
@@ -989,7 +964,12 @@ export function useZplEditor(t: TFunction) {
       const hIn = z.unit === 'mm' ? (parseFloat(z.h) || 0) / 25.4 : parseFloat(z.h) || 0
       const r2 = (v: number) => Math.round(v * 100) / 100
       const url = `https://api.labelary.com/v1/printers/${z.dpmm}dpmm/labels/${r2(wIn)}x${r2(hIn)}/0/`
-      fetch(url, { method: 'POST', headers: { Accept: 'image/png' }, body: zplText })
+      // Content-Type 미지정 시 fetch 가 text/plain 으로 보내 Labelary 가 415 를 반환한다.
+      fetch(url, {
+        method: 'POST',
+        headers: { Accept: 'image/png', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: zplText,
+      })
         .then(async (res) => {
           if (!res.ok) {
             const reason = await res.text().catch(() => '')
@@ -1017,8 +997,6 @@ export function useZplEditor(t: TFunction) {
   useEffect(() => {
     return () => {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-      window.clearTimeout(rt1.current)
-      window.clearTimeout(rt2.current)
       window.clearTimeout(copyTimer.current)
     }
   }, [])
