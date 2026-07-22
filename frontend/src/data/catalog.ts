@@ -1,4 +1,5 @@
-// 도구 카탈로그 — 카테고리 3개 · 도구 8개(시드 데이터).
+// 도구 카탈로그 — 카테고리 4개 · 도구 5개.
+// 전용 상세 화면이 구현된 도구만 등록한다(registry.ts의 TOOL_COMPONENTS와 1:1 대응).
 // 이름/설명은 언어별 맵으로 보관해 UI 언어에 따라 해석한다(README: 언어별 맵 방식).
 import type { IconKey } from '../lib/icons'
 
@@ -24,6 +25,7 @@ export const CATEGORIES: Category[] = [
   { id: 'barcode', name: { ko: '바코드 & 라벨', en: 'Barcode & Labels' } },
   { id: 'text', name: { ko: '텍스트 & 포맷', en: 'Text & Format' } },
   { id: 'convert', name: { ko: '변환 & 인코딩', en: 'Convert & Encode' } },
+  { id: 'security', name: { ko: '보안 & 키', en: 'Security & Keys' } },
 ]
 
 export const TOOLS: Tool[] = [
@@ -48,20 +50,6 @@ export const TOOLS: Tool[] = [
     },
   },
   {
-    id: 'json-format',
-    cat: 'text',
-    icon: 'braces',
-    name: { ko: 'JSON 포매터', en: 'JSON Formatter' },
-    desc: { ko: 'JSON 정렬 · 검증 · 압축', en: 'Prettify, validate and minify JSON' },
-  },
-  {
-    id: 'regex-test',
-    cat: 'text',
-    icon: 'regex',
-    name: { ko: '정규식 테스터', en: 'Regex Tester' },
-    desc: { ko: '패턴을 실시간으로 매칭 확인', en: 'Match patterns against text in real time' },
-  },
-  {
     id: 'text-diff',
     cat: 'text',
     icon: 'diff',
@@ -76,18 +64,14 @@ export const TOOLS: Tool[] = [
     desc: { ko: '문자열 · 파일 인코딩/디코딩', en: 'Encode and decode strings and files' },
   },
   {
-    id: 'timestamp',
-    cat: 'convert',
-    icon: 'clock',
-    name: { ko: '타임스탬프 변환', en: 'Timestamp Converter' },
-    desc: { ko: 'Unix 시간 ↔ 날짜 변환', en: 'Convert between Unix time and dates' },
-  },
-  {
-    id: 'color-convert',
-    cat: 'convert',
-    icon: 'palette',
-    name: { ko: '컬러 변환기', en: 'Color Converter' },
-    desc: { ko: 'HEX · RGB · HSL 상호 변환', en: 'Convert between HEX, RGB and HSL' },
+    id: 'key-generator',
+    cat: 'security',
+    icon: 'key',
+    name: { ko: '키 생성기', en: 'Key Generator' },
+    desc: {
+      ko: 'JWT · UUID · SSH/RSA 등 랜덤 키·시크릿 생성 (브라우저 로컬)',
+      en: 'Generate random keys and secrets — JWT, UUID, SSH/RSA and more',
+    },
   },
 ]
 

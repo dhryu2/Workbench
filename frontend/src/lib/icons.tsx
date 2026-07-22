@@ -2,37 +2,23 @@
 // 도구 카탈로그는 IconKey 문자열로 아이콘을 참조하고, 여기서 Lucide 컴포넌트로 해석한다.
 import {
   Binary,
-  Braces,
-  Clock,
   GitCompare,
-  Palette,
+  KeyRound,
   QrCode,
-  Regex,
   Tag,
   type LucideIcon,
   type LucideProps,
 } from 'lucide-react'
 
 // 카탈로그에서 쓰는 도구 아이콘 키
-export type IconKey =
-  | 'qr'
-  | 'tag'
-  | 'braces'
-  | 'regex'
-  | 'diff'
-  | 'binary'
-  | 'clock'
-  | 'palette'
+export type IconKey = 'qr' | 'tag' | 'diff' | 'binary' | 'key'
 
 const TOOL_ICONS: Record<IconKey, LucideIcon> = {
   qr: QrCode,
   tag: Tag,
-  braces: Braces,
-  regex: Regex,
   diff: GitCompare, // git-compare = diff
   binary: Binary,
-  clock: Clock,
-  palette: Palette,
+  key: KeyRound,
 }
 
 // stroke-width 1.5를 강제하는 공용 래퍼. size 기본 20.
