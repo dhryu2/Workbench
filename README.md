@@ -37,7 +37,7 @@ npm run dev       # http://localhost:5173
 
 ```bash
 cd backend
-./gradlew bootRun # http://localhost:8080
+./gradlew bootRun # http://localhost:23001
 ```
 
 To build a production artifact:
