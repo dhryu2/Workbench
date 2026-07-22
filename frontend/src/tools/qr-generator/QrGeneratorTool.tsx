@@ -294,6 +294,7 @@ function QrCard({ entry, idx, onRemove, onDownload, removeLabel, downloadLabel, 
         {done && <img src={url} alt={entry.text} style={{ width: '100%', height: 'auto', display: 'block' }} />}
         {loading && (
           <div
+            aria-hidden={true} // 로딩 '…'은 장식 — SR에는 숨김(완료/실패만 인식되게)
             style={{
               width: '100%',
               aspectRatio: '1',
@@ -309,6 +310,8 @@ function QrCard({ entry, idx, onRemove, onDownload, removeLabel, downloadLabel, 
         )}
         {error && (
           <div
+            role="img"
+            aria-label={errorLabel} // 실패 카드를 라벨된 이미지로 인식(SR이 실패 사유를 읽음)
             style={{
               width: '100%',
               aspectRatio: '1',

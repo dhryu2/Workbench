@@ -34,10 +34,14 @@ export function useQrGenerator() {
 
   // ── 항목 추가 + 상한 처리 (README _addTexts) ──
   // 남은 자리(room)만큼만 받고, 넘친 개수는 lastOverflow로 기록(경고 배너 문구용).
+  // 실제 추가된 개수를 반환한다(호출부가 성공 시에만 입력창을 비우도록).
   const addTexts = useCallback(
-    (texts: string[]) => {
+    (texts: string[]): number => {
       const room = Math.max(0, qrCap - entries.length)
       const take = texts.slice(0, room)
+      // 상한이 꽉 차 아무것도 못 넣으면 no-op: 입력 보존 + 기존 at_cap 안내 유지(overflow 미갱신).
+      // (비활성화된 [추가]/[일괄 생성] 버튼과 동일한 결과 — Enter로 우회해도 입력이 사라지지 않게)
+      if (take.length === 0) return 0
       const overflow = texts.length - take.length
       const add: QrEntry[] = take.map((text) => ({
         id: 'q' + seqRef.current++,
@@ -45,7 +49,8 @@ export function useQrGenerator() {
         dataUrl: null,
       }))
       setLastOverflow(overflow)
-      if (add.length > 0) setEntries((prev) => [...prev, ...add])
+      setEntries((prev) => [...prev, ...add])
+      return take.length
     },
     [entries, qrCap],
   )
@@ -55,8 +60,7 @@ export function useQrGenerator() {
     let t = single
     if (trim) t = t.trim()
     if (t.length === 0) return // 빈 값 무시
-    addTexts([t])
-    setSingle('')
+    if (addTexts([t]) > 0) setSingle('') // 실제 추가됐을 때만 입력창 비움
   }, [single, trim, addTexts])
 
   // ── 일괄 생성 (README addBulk): 줄 분리 → (trim) → 빈 줄 무시 ──
@@ -66,8 +70,7 @@ export function useQrGenerator() {
       .map((l) => (trim ? l.trim() : l))
       .filter((l) => l.length > 0)
     if (lines.length === 0) return
-    addTexts(lines)
-    setBulk('')
+    if (addTexts(lines) > 0) setBulk('') // 실제 추가됐을 때만 입력창 비움
   }, [bulk, trim, addTexts])
 
   // Enter 키 = [추가]와 동일(기본 폼 제출 방지).
@@ -101,8 +104,10 @@ export function useQrGenerator() {
   // 다운로드 — dataUrl(PNG)로 <a download> 클릭을 프로그래매틱 트리거
   const download = useCallback((entry: QrEntry) => {
     if (typeof entry.dataUrl !== 'string') return
-    // 파일명 안전화: [^\w.-] → '_', 40자 컷, 빈 문자열이면 'qr'
-    const safe = (entry.text || 'qr').replace(/[^\w.-]+/g, '_').slice(0, 40) || 'qr'
+    // 파일명 안전화: 유니코드 글자/숫자와 . _ - 는 보존(한글도 그대로 → 파일명이 서로 구분됨),
+    // 그 외 문자는 '_'. 코드포인트 단위로 40자 컷(서로게이트 분리 방지), 남는 게 없으면 'qr'.
+    const cleaned = (entry.text || 'qr').replace(/[^\p{L}\p{N}._-]+/gu, '_')
+    const safe = Array.from(cleaned).slice(0, 40).join('') || 'qr'
     const a = document.createElement('a')
     a.href = entry.dataUrl
     a.download = 'qr_' + safe + '.png'
