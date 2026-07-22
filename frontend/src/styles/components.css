@@ -14,14 +14,6 @@
   transform: translateY(-2px);
 }
 
-/* 카드/도구 헤더 즐겨찾기 버튼 hover */
-.wb-fav-btn {
-  transition: background 0.12s;
-}
-.wb-fav-btn:hover {
-  background: color-mix(in srgb, var(--wb-color-text) 7%, transparent);
-}
-
 /* 사이드바 접기 버튼 hover */
 .wb-collapse-btn:hover {
   background: color-mix(in srgb, var(--wb-color-text) 6%, transparent);

@@ -5,9 +5,7 @@ export const en: ShellStrings = {
   // Top bar
   search_global: 'Search tools…',
   lang_switch: 'Switch language',
-  // Sidebar sections
-  fav: 'Favorites',
-  recent: 'Recent',
+  // Sidebar
   collapse: 'Collapse sidebar',
   expand: 'Expand sidebar',
   // Launcher
@@ -26,9 +24,6 @@ export const en: ShellStrings = {
   tool_placeholder_title: 'Tool content area',
   tool_placeholder_body: "This tool's screen will render here.",
   back: 'Launcher',
-  // Favorite toggle
-  fav_add: 'Add favorite',
-  fav_remove: 'Remove favorite',
   // Empty states
   empty_title: 'No tools yet',
   empty_body: 'Tools will appear here, grouped by category, once added.',

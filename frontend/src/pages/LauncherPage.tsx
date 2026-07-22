@@ -1,6 +1,6 @@
 // 루트 런처(`/`) — 페이지 헤더 + 인라인 검색/카테고리 칩 + 카테고리별 도구 카드 그리드.
 // 빈 상태(검색 결과 없음 / 빈 카탈로그)는 필터 결과·카탈로그 크기에 따라 자연 발생한다.
-import { Inbox, Search, Star } from 'lucide-react'
+import { Inbox, Search } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,13 +9,11 @@ import { CATEGORIES, TOOLS, categoryName, type Tool } from '../data/catalog'
 import { Icon, ToolIcon } from '../lib/icons'
 import { useLang } from '../lib/useLang'
 import { useOpenTool } from '../lib/useOpenTool'
-import { useWorkbench } from '../lib/workbench-context'
 
 export function LauncherPage() {
   const { t } = useTranslation()
   const lang = useLang()
   const openTool = useOpenTool()
-  const { isFavorite, toggleFavorite } = useWorkbench()
   const [query, setQuery] = useState('')
   const [catFilter, setCatFilter] = useState('all')
 
@@ -139,94 +137,51 @@ export function LauncherPage() {
                   gap: 16,
                 }}
               >
-                {group.tools.map((tool) => {
-                  const fav = isFavorite(tool.id)
-                  return (
-                    <Blueprint
-                      key={tool.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openTool(tool.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          openTool(tool.id)
-                        }
-                      }}
-                      className="wb-card wb-elev-sm wb-tool-card"
+                {group.tools.map((tool) => (
+                  <Blueprint
+                    key={tool.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openTool(tool.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        openTool(tool.id)
+                      }
+                    }}
+                    className="wb-card wb-elev-sm wb-tool-card"
+                    style={{
+                      cursor: 'pointer',
+                      gap: 11,
+                      padding: 16,
+                      minHeight: 138,
+                      background: 'var(--wb-color-bg)',
+                    }}
+                  >
+                    <span
                       style={{
-                        cursor: 'pointer',
-                        gap: 11,
-                        padding: 16,
-                        minHeight: 138,
-                        background: 'var(--wb-color-bg)',
+                        width: 42,
+                        height: 42,
+                        flex: 'none',
+                        display: 'grid',
+                        placeItems: 'center',
+                        border: '1px solid var(--wb-color-divider)',
+                        color: 'var(--wb-color-accent)',
                       }}
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          gap: 8,
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: 42,
-                            height: 42,
-                            flex: 'none',
-                            display: 'grid',
-                            placeItems: 'center',
-                            border: '1px solid var(--wb-color-divider)',
-                            color: 'var(--wb-color-accent)',
-                          }}
-                        >
-                          <ToolIcon name={tool.icon} size={22} />
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleFavorite(tool.id)
-                          }}
-                          title={fav ? t('fav_remove') : t('fav_add')}
-                          className="wb-fav-btn"
-                          style={{
-                            width: 30,
-                            height: 30,
-                            flex: 'none',
-                            display: 'grid',
-                            placeItems: 'center',
-                            cursor: 'pointer',
-                            background: 'transparent',
-                            border: '1px solid transparent',
-                            padding: 0,
-                          }}
-                        >
-                          <Icon
-                            icon={Star}
-                            size={16}
-                            fill={fav ? 'var(--wb-color-accent)' : 'none'}
-                            color={
-                              fav
-                                ? 'var(--wb-color-accent)'
-                                : 'color-mix(in srgb, var(--wb-color-text) 40%, transparent)'
-                            }
-                          />
-                        </button>
-                      </div>
-                      <div className="wb-card-title" style={{ fontSize: 17 }}>
-                        {tool.name[lang]}
-                      </div>
-                      <p className="wb-card-body" style={{ fontSize: 13, margin: 0 }}>
-                        {tool.desc[lang]}
-                      </p>
-                      <div className="wb-card-meta">
-                        <span className="wb-tag wb-tag-neutral">{group.name}</span>
-                      </div>
-                    </Blueprint>
-                  )
-                })}
+                      <ToolIcon name={tool.icon} size={22} />
+                    </span>
+                    <div className="wb-card-title" style={{ fontSize: 17 }}>
+                      {tool.name[lang]}
+                    </div>
+                    <p className="wb-card-body" style={{ fontSize: 13, margin: 0 }}>
+                      {tool.desc[lang]}
+                    </p>
+                    <div className="wb-card-meta">
+                      <span className="wb-tag wb-tag-neutral">{group.name}</span>
+                    </div>
+                  </Blueprint>
+                ))}
               </div>
             </section>
           ))}

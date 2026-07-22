@@ -1,10 +1,10 @@
-// 사이드바 — 즐겨찾기 / 최근 사용 / 카테고리별 전체 도구 + 하단 접기 버튼.
+// 사이드바 — 카테고리별 전체 도구 + 하단 접기 버튼.
 // 활성 상태는 현재 URL(/tools/:toolId)로 판정한다.
 import { PanelLeft } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch } from 'react-router-dom'
-import { CATEGORIES, TOOLS, toolById, type Tool } from '../data/catalog'
+import { CATEGORIES, TOOLS, type Tool } from '../data/catalog'
 import { Icon, ToolIcon } from '../lib/icons'
 import { useLang } from '../lib/useLang'
 import { useOpenTool } from '../lib/useOpenTool'
@@ -14,7 +14,6 @@ export function Sidebar() {
   const { t } = useTranslation()
   const lang = useLang()
   const { collapsed, toggleCollapsed } = useWorkbench()
-  const { favorites, recents } = useWorkbench()
   const openTool = useOpenTool()
   const match = useMatch('/tools/:toolId')
   const activeId = match?.params.toolId ?? null
@@ -84,8 +83,6 @@ export function Sidebar() {
   }
 
   // ── 데이터 구성 ──
-  const favItems = favorites.map(toolById).filter((x): x is Tool => Boolean(x))
-  const recentItems = recents.map(toolById).filter((x): x is Tool => Boolean(x))
   const sideGroups = CATEGORIES.map((c) => ({
     id: c.id,
     name: c.name[lang],
@@ -113,24 +110,6 @@ export function Sidebar() {
           padding: '12px 10px',
         }}
       >
-        {favItems.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={headStyle}>{t('fav')}</div>
-            {favItems.map((tool) => (
-              <NavRow key={`fav-${tool.id}`} tool={tool} />
-            ))}
-          </div>
-        )}
-
-        {recentItems.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={headStyle}>{t('recent')}</div>
-            {recentItems.map((tool) => (
-              <NavRow key={`recent-${tool.id}`} tool={tool} />
-            ))}
-          </div>
-        )}
-
         {sideGroups.map((group) => (
           <div key={group.id} style={{ marginBottom: 14 }}>
             <div style={headStyle}>{group.name}</div>

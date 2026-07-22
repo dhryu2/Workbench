@@ -3,9 +3,7 @@ export const ko = {
   // 상단 바
   search_global: '도구 검색…',
   lang_switch: '언어 전환',
-  // 사이드바 섹션
-  fav: '즐겨찾기',
-  recent: '최근 사용',
+  // 사이드바
   collapse: '사이드바 접기',
   expand: '사이드바 펼치기',
   // 런처
@@ -24,9 +22,6 @@ export const ko = {
   tool_placeholder_title: '도구 콘텐츠 영역',
   tool_placeholder_body: '이 도구의 화면이 여기에 표시됩니다.',
   back: '런처',
-  // 즐겨찾기 토글
-  fav_add: '즐겨찾기 추가',
-  fav_remove: '즐겨찾기 해제',
   // 빈 상태
   empty_title: '아직 도구가 없습니다',
   empty_body: '도구가 추가되면 이곳에 카테고리별로 나타납니다.',
