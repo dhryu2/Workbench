@@ -1018,6 +1018,7 @@ export function useZplEditor(t: TFunction) {
     canUndo: z.past.length > 0,
     canRedo: z.future.length > 0,
     canCopy: !!z.sel,
+    canDelete: !!z.sel,
     canPaste: !!z.clip,
     canReset: z.els.length > 0,
     // 삽입/선택/편집

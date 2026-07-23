@@ -1,8 +1,10 @@
 // ZPL 역파서(순수 모듈) — 이 도구(zpl-generate)가 내보내는 명령 집합을 요소로 복원한다.
-// 지원: ^XA ^XZ ^PW ^LL ^CI ^FX ^FO ^A0 ^FB ^FD ^FS ^BY ^BC ^B3 ^BE ^BU ^BQ ^GB ^GE ^GC ^GD ^GFA
+// 지원: ^XA ^XZ ^PW ^LL ^CI ^CF ^FX ^FO ^A<글꼴> ^FB ^FD ^FR ^FS ^BY ^BC ^B3 ^BE ^BU ^BQ ^GB ^GE ^GC ^GD ^GFA
 // 미지원 명령은 라인 번호와 함께 오류로 보고한다(조용한 무시 금지 — WYSIWYG 보장 원칙).
 //
 // 알려진 손실 변환(생성 형식의 구조상 불가피):
+// - 비트맵 글꼴은 확장 가능한 글꼴 모델로 근사된다.
+// - ^FR 반전 인쇄는 무시된다.
 // - 표는 ^GB 조각+텍스트로 평탄화되어 나가므로 개별 박스/선/텍스트로 복원된다.
 // - 합성 테두리(^GB)는 별도 박스 요소로 복원된다.
 import { sanitizeBarcodeData, sanitizeFieldData, sanitizeZplText } from './sanitize'
@@ -80,6 +82,7 @@ export function parseZpl(txt: string): ParseResult {
   let pw: number | null = null
   let ll: number | null = null
   let module = 3 // ^BY 지속 상태
+  let cf: { h: number; w: number } | null = null
 
   // 열린 필드(^FO … ^FS) 상태
   interface Field {
@@ -173,7 +176,7 @@ export function parseZpl(txt: string): ParseResult {
     }
     if (fld.font != null || fld.fd != null) {
       if (fld.fd == null) return { ok: false, code: 'bad', line }
-      const font = fld.font ?? { rot: 0 as Rotation, h: 30, w: 30 }
+      const font = fld.font ?? (cf ? { rot: 0 as Rotation, h: cf.h, w: cf.w } : { rot: 0 as Rotation, h: 30, w: 30 })
       const text = sanitizeZplText(fld.fd.split('\\&').join('\n'))
       els.push({
         type: 'text',
@@ -213,6 +216,10 @@ export function parseZpl(txt: string): ParseResult {
       if (c.code === 'PW') pw = intAt(p, 0, 0) || pw
       else if (c.code === 'LL') ll = intAt(p, 0, 0) || ll
       else if (c.code === 'CI') continue
+      else if (c.code === 'CF') {
+        const h = intAt(p, 1, cf?.h ?? 30)
+        cf = { h, w: intAt(p, 2, h) }
+      }
       else if (c.code === 'BY') module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
       else if (c.code === 'FX') continue
       else if (c.code === 'FO') f = { x: intAt(p, 0, 0), y: intAt(p, 1, 0), line: c.line, module }
@@ -229,7 +236,7 @@ export function parseZpl(txt: string): ParseResult {
     } else if (c.code === 'FO') {
       // 닫히지 않은 필드에서 새 ^FO — 형식 오류
       return { ok: false, code: 'bad', line: c.line }
-    } else if (c.code === 'A0') {
+    } else if (c.code[0] === 'A' && c.code.length === 2) {
       // params: "N,56,56" (회전문자, 높이, 폭)
       const rot = rotOf(p[0] || 'N')
       f.font = { rot, h: intAt(p, 1, 30), w: intAt(p, 2, intAt(p, 1, 30)) }
@@ -240,6 +247,8 @@ export function parseZpl(txt: string): ParseResult {
       f.fd = c.params
     } else if (c.code === 'FX') {
       f.fx = true
+    } else if (c.code === 'FR') {
+      // 반전 인쇄는 알려진 손실 변환으로 무시
     } else if (c.code === 'BY') {
       f.module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
       module = f.module

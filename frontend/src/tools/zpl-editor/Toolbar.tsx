@@ -16,6 +16,7 @@ import {
   Slash,
   SlidersHorizontal,
   Table as TableIcon,
+  Trash2,
   Type,
   Undo2,
   Redo2,
@@ -41,13 +42,17 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
   const { t } = useTranslation()
   const { z } = api
 
-  // 삽입 버튼 정의 (lucide 아이콘 또는 인라인 ellipse)
-  const insertBtns: { type: Element['type']; icon: LucideIcon | null; ell?: boolean; label: string }[] = [
+  type InsertBtn = { type: Element['type']; icon: LucideIcon | null; ell?: boolean; label: string }
+
+  // 삽입 버튼 — 기능별 분류: 콘텐츠(텍스트·바코드·QR·이미지·표) vs 도형(박스·타원·원·선·대각선)
+  const contentBtns: InsertBtn[] = [
     { type: 'text', icon: Type, label: t('z_text') },
     { type: 'barcode', icon: ScanLine, label: t('z_barcode') },
     { type: 'qr', icon: QrCode, label: t('z_qr') },
     { type: 'image', icon: ImageIcon, label: t('z_image') },
     { type: 'table', icon: TableIcon, label: t('z_table') },
+  ]
+  const shapeBtns: InsertBtn[] = [
     { type: 'box', icon: BoxSelect, label: t('z_box') },
     { type: 'ellipse', icon: null, ell: true, label: t('z_ellipse') },
     { type: 'circle', icon: Circle, label: t('z_circle') },
@@ -55,14 +60,21 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
     { type: 'diagonal', icon: Slash, label: t('z_diagonal') },
   ]
 
-  // 편집 조작 버튼(undo/redo/copy/paste)
-  const editOp = (icon: LucideIcon, title: string, onClick: () => void, disabled: boolean, first: boolean) => (
+  // 세그먼트형 아이콘 버튼(툴바 그룹 공통) — 아이콘 전용 + 툴팁으로 공간 절약.
+  const segBtn = (
+    key: string,
+    icon: LucideIcon | null,
+    title: string,
+    onClick: () => void,
+    opts?: { disabled?: boolean; first?: boolean; ell?: boolean },
+  ) => (
     <button
+      key={key}
       type="button"
       title={title}
       aria-label={title}
       onClick={onClick}
-      disabled={disabled}
+      disabled={opts?.disabled}
       className="wb-zpl-iconbtn"
       style={{
         width: 34,
@@ -71,13 +83,22 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
         placeItems: 'center',
         background: 'transparent',
         border: 'none',
-        borderLeft: first ? 'none' : '1px solid var(--wb-color-divider)',
+        borderLeft: opts?.first ? 'none' : '1px solid var(--wb-color-divider)',
         color: 'var(--wb-color-text)',
         cursor: 'pointer',
       }}
     >
-      <Icon icon={icon} size={15} />
+      {opts?.ell ? <EllipseIcon size={15} /> : icon ? <Icon icon={icon} size={15} /> : null}
     </button>
+  )
+
+  // 삽입 그룹(콘텐츠/도형) 렌더 헬퍼
+  const insertGroup = (btns: InsertBtn[], keyPrefix: string) => (
+    <div style={{ display: 'flex', border: '1px solid var(--wb-color-divider)' }}>
+      {btns.map((b, i) =>
+        segBtn(`${keyPrefix}-${b.type}`, b.icon, b.label, () => api.addEl(b.type), { first: i === 0, ell: b.ell }),
+      )}
+    </div>
   )
 
   return (
@@ -92,34 +113,25 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
         flexWrap: 'wrap',
       }}
     >
-      {/* INSERT 그룹 */}
+      {/* INSERT 그룹 — 콘텐츠/도형 두 세그먼트로 분류(아이콘 전용) */}
       <span style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--wb-color-text) 50%, transparent)' }}>
         {t('z_insert')}
       </span>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {insertBtns.map((b) => (
-          <button
-            key={b.type}
-            type="button"
-            onClick={() => api.addEl(b.type)}
-            className="wb-btn wb-btn-secondary"
-            style={{ height: 32, gap: 6, fontSize: 13, padding: '0 10px' }}
-          >
-            {b.ell ? <EllipseIcon size={15} /> : b.icon ? <Icon icon={b.icon} size={15} /> : null}
-            {b.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {insertGroup(contentBtns, 'content')}
+        {insertGroup(shapeBtns, 'shape')}
       </div>
 
       {/* 세로 구분선 */}
       <span style={{ width: 1, height: 24, background: 'var(--wb-color-divider)' }} />
 
-      {/* 편집 조작 그룹 */}
+      {/* 편집 조작 그룹(undo/redo/copy/paste/delete) */}
       <div style={{ display: 'flex', border: '1px solid var(--wb-color-divider)' }}>
-        {editOp(Undo2, t('z_undo'), api.undo, !api.canUndo, true)}
-        {editOp(Redo2, t('z_redo'), api.redo, !api.canRedo, false)}
-        {editOp(Copy, t('z_copy_el'), api.copySel, !api.canCopy, false)}
-        {editOp(ClipboardPaste, t('z_paste'), api.pasteClip, !api.canPaste, false)}
+        {segBtn('undo', Undo2, t('z_undo'), api.undo, { disabled: !api.canUndo, first: true })}
+        {segBtn('redo', Redo2, t('z_redo'), api.redo, { disabled: !api.canRedo })}
+        {segBtn('copy', Copy, t('z_copy_el'), api.copySel, { disabled: !api.canCopy })}
+        {segBtn('paste', ClipboardPaste, t('z_paste'), api.pasteClip, { disabled: !api.canPaste })}
+        {segBtn('delete', Trash2, t('z_delete'), api.deleteSel, { disabled: !api.canDelete })}
       </div>
 
       {/* 설정 버튼 */}
