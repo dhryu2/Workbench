@@ -12,6 +12,34 @@ export type BarcodeType = 'code128' | 'code39' | 'ean13' | 'upca'
 export type Ecc = 'L' | 'M' | 'Q' | 'H'
 export type LineDir = 'h' | 'v'
 export type DiagonalDir = 'L' | 'R'
+export type FontFace =
+  | '0'
+  | 'A'
+  | 'B'
+  | 'C'
+  | 'D'
+  | 'E'
+  | 'F'
+  | 'G'
+  | 'H'
+  | 'I'
+  | 'J'
+  | 'K'
+  | 'L'
+  | 'M'
+  | 'N'
+  | 'O'
+  | 'P'
+  | 'Q'
+  | 'R'
+  | 'S'
+  | 'T'
+  | 'U'
+  | 'V'
+  | 'W'
+  | 'X'
+  | 'Y'
+  | 'Z'
 
 // text/barcode/qr/image 에만 존재하는 합성 테두리 스펙
 export interface Border {
@@ -50,6 +78,7 @@ interface BaseElement {
   id: string
   x: number
   y: number
+  reverse?: boolean
 }
 
 export interface TextElement extends BaseElement {
@@ -62,6 +91,8 @@ export interface TextElement extends BaseElement {
   rot: Rotation
   maxLines: number
   border: Border
+  block?: boolean
+  face?: FontFace
 }
 
 export interface BarcodeElement extends BaseElement {

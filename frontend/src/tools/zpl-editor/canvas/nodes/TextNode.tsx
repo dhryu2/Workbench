@@ -5,28 +5,30 @@
 import { Group, Text } from 'react-konva'
 import { norm } from '../../geometry'
 import { INK } from '../theme'
-import { LABEL_FONT, LABEL_LINE_HEIGHT, labelTextOffsetY } from '../fonts'
+import { LABEL_LINE_HEIGHT, labelFontFamily, labelFontScaleX, labelTextOffsetY } from '../fonts'
 import type { TextElement } from '../../types'
 
 export function TextNode({ el }: { el: TextElement }) {
   const { w, h } = norm(el)
-  const sx = el.font > 0 ? (el.fontW || el.font) / el.font : 1
+  const sx = labelFontScaleX(el.face, el.font, el.fontW)
   const align = el.align === 'C' ? 'center' : el.align === 'R' ? 'right' : el.align === 'J' ? 'justify' : 'left'
-  return (
-    <Group clipX={0} clipY={0} clipWidth={w} clipHeight={h} listening={false}>
-      <Text
-        text={el.text}
-        width={sx > 0 ? w / sx : w}
-        scaleX={sx}
-        offsetY={labelTextOffsetY(el.font, LABEL_LINE_HEIGHT)}
-        fontFamily={LABEL_FONT}
-        fontStyle="bold"
-        fontSize={el.font}
-        lineHeight={LABEL_LINE_HEIGHT}
-        align={align}
-        wrap="word"
-        fill={INK}
-      />
-    </Group>
+  const text = (
+    <Text
+      text={el.text}
+      width={el.block === false ? undefined : sx > 0 ? w / sx : w}
+      scaleX={sx}
+      offsetY={labelTextOffsetY(el.font, LABEL_LINE_HEIGHT, el.face)}
+      fontFamily={labelFontFamily(el.face)}
+      fontStyle={el.face === 'A' ? 'normal' : 'bold'}
+      fontSize={el.font}
+      lineHeight={LABEL_LINE_HEIGHT}
+      align={align}
+      wrap={el.block === false ? 'none' : 'word'}
+      fill={INK}
+      globalCompositeOperation={el.reverse ? 'xor' : 'source-over'}
+      listening={false}
+    />
   )
+  if (el.block === false) return text
+  return <Group clipX={0} clipY={0} clipWidth={w} clipHeight={h} listening={false}>{text}</Group>
 }

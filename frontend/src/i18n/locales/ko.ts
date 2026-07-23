@@ -100,6 +100,7 @@ export const ko = {
   z_fld_thick: '두께 (dot)',
   z_fld_data: '데이터',
   z_maxlines: '최대 줄 수',
+  z_text_block: '필드 블록 (^FB)',
   z_diameter: '지름 (dot)',
   z_module: '모듈 폭 (^BY)',
   z_mag_step: '배율 (1–10)',

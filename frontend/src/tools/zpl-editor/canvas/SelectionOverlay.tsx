@@ -35,7 +35,8 @@ const H = (role: string, fx: number, fy: number, cursor: string): HandleDef => (
 
 // 타입별 핸들 세트(§5.2 — v1/핸드오프와 동일, 제약 패리티 우선).
 function handlesFor(el: Element): HandleDef[] {
-  if (el.type === 'text') return [H('wL', 0, 0.5, 'ew-resize'), H('wR', 1, 0.5, 'ew-resize')]
+  if (el.type === 'text')
+    return el.block === false ? [] : [H('wL', 0, 0.5, 'ew-resize'), H('wR', 1, 0.5, 'ew-resize')]
   if (el.type === 'barcode') return [H('hT', 0.5, 0, 'ns-resize'), H('hB', 0.5, 1, 'ns-resize')]
   if (el.type === 'qr' || el.type === 'circle' || (el.type === 'image' && !el.free))
     return [H('nw', 0, 0, 'nwse-resize'), H('ne', 1, 0, 'nesw-resize'), H('se', 1, 1, 'nwse-resize'), H('sw', 0, 1, 'nesw-resize')]

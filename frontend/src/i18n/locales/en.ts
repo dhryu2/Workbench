@@ -102,6 +102,7 @@ export const en: ShellStrings = {
   z_fld_thick: 'Thickness (dot)',
   z_fld_data: 'Data',
   z_maxlines: 'Max lines',
+  z_text_block: 'Field block (^FB)',
   z_diameter: 'Diameter (dot)',
   z_module: 'Module width (^BY)',
   z_mag_step: 'Magnification (1–10)',

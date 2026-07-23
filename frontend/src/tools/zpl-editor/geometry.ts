@@ -6,6 +6,7 @@ import { DPI_BY_DPMM } from './types'
 import type {
   Element,
   BarcodeElement,
+  BorderableElement,
   QrElement,
   TextElement,
   TableElement,
@@ -21,6 +22,13 @@ export interface Rect {
   y: number
   w: number
   h: number
+}
+
+// 합성 테두리의 요소 로컬 기하 — 캔버스와 ZPL 생성기가 이 값을 함께 써 드리프트를 막는다.
+export function borderBox(el: BorderableElement): Rect & { t: number } {
+  const pad = el.border.pad || 0
+  const { w, h } = norm(el)
+  return { x: -pad, y: -pad, w: w + pad * 2, h: h + pad * 2, t: el.border.t || 2 }
 }
 
 // dpmm → dpi. 미지정 밀도는 203(8dpmm)으로 폴백.
@@ -94,8 +102,20 @@ export function hriHeight(el: BarcodeElement): number {
   return el.hri ? hriFontSize(el) : 0
 }
 
+// ^FB 없는 텍스트 파생 폭: 캔버스 대체 글꼴의 평균 자폭 × 최장 줄 길이 × 요청 장평.
+// 글꼴 A는 monospace 0.6em을 fontW 셀 폭에 맞춰 보정하므로 결과적으로 글자당 fontW가 된다.
+export function textW(el: TextElement): number {
+  const font = el.font || 30
+  const fontW = el.fontW || font
+  const avgEm = el.face === 'A' ? 0.6 : 0.52
+  const scaleX = el.face === 'A' ? fontW / font / 0.6 : fontW / font
+  const longest = Math.max(1, ...String(el.text || '').split('\n').map((line) => Array.from(line).length))
+  return Math.max(1, Math.round(longest * font * avgEm * scaleX))
+}
+
 // 텍스트 파생 높이: 폰트 × 1.18 × min(maxLines, 실제줄수), 최소 1줄.
 export function textH(el: TextElement): number {
+  if (el.block === false) return Math.round((el.font || 30) * 1.18)
   const lines = Math.min(el.maxLines || 8, String(el.text || '').split('\n').length)
   return Math.round((el.font || 30) * 1.18 * Math.max(1, lines))
 }
@@ -132,7 +152,9 @@ export function norm(el: Element): { w: number; h: number } {
     case 'line':
       return el.dir === 'v' ? { w: el.t, h: el.len } : { w: el.len, h: el.t }
     case 'text':
-      return { w: el.w, h: textH(el) }
+      // block(^FB) 폭이 유효하면 그대로, 아니면(비-block 이거나 폭 0) 실측 근사 폭으로 폴백해
+      // bbox·선택 히트영역·합성 테두리가 0폭으로 퇴화하지 않게 한다.
+      return { w: el.block !== false && el.w > 0 ? el.w : textW(el), h: textH(el) }
     case 'table':
       return { w: tableW(el), h: tableH(el) }
     case 'image':

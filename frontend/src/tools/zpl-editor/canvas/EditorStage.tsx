@@ -8,7 +8,7 @@ import { FileInput, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Blueprint } from '../../../components/Blueprint'
 import { Icon } from '../../../lib/icons'
-import { norm } from '../geometry'
+import { borderBox, norm } from '../geometry'
 import { labelFontsReady, loadLabelFonts } from './fonts'
 import { OverlayLayer } from './SelectionOverlay'
 import { TextNode } from './nodes/TextNode'
@@ -17,14 +17,34 @@ import { QrNode } from './nodes/QrNode'
 import { ImageNode } from './nodes/ImageNode'
 import { ShapeNode } from './nodes/ShapeNodes'
 import { TableNode } from './nodes/TableNode'
+import { INK } from './theme'
 import type { ReactNode } from 'react'
-import type { Element } from '../types'
+import type { BorderableElement, Element } from '../types'
 import type { ZplEditorApi } from '../useZplEditor'
 import type { KonvaEventObject } from 'konva/lib/Node'
 
 function setCursor(e: KonvaEventObject<PointerEvent>, cursor: string) {
   const st = e.target.getStage()
   if (st) st.container().style.cursor = cursor
+}
+
+function SyntheticBorder({ el }: { el: BorderableElement }) {
+  const b = el.border
+  if (!b.on) return null
+  const box = borderBox(el)
+  // Konva 스트로크는 경로 양쪽으로 자라므로 경로를 반 두께만큼 안으로 넣어 ^GB의 안쪽 두께와 맞춘다.
+  const t = Math.min(Math.max(box.t, 1), box.w / 2, box.h / 2)
+  return (
+    <Rect
+      x={box.x + t / 2}
+      y={box.y + t / 2}
+      width={box.w - t}
+      height={box.h - t}
+      stroke={INK}
+      strokeWidth={t}
+      listening={false}
+    />
+  )
 }
 
 // 요소 1개 — 회전 타입은 ^FO 원점 피벗 Group 회전(§6.5), bbox 투명 Rect 가 히트 영역(v1 div 동일).
@@ -49,11 +69,11 @@ function ElementNode({ el, api, zoom, imageLabel }: { el: Element; api: ZplEdito
     default:
       visual = <ShapeNode el={el} zoom={zoom} />
   }
+  const borderable = el.type === 'text' || el.type === 'barcode' || el.type === 'qr' || el.type === 'image'
   return (
     <Group
       x={el.x}
       y={el.y}
-      rotation={rot}
       onPointerDown={(e) => api.elPointerDown(el.id, e.evt)}
       onPointerEnter={(e) => {
         api.hoverEl(el.id)
@@ -64,8 +84,11 @@ function ElementNode({ el, api, zoom, imageLabel }: { el: Element; api: ZplEdito
         setCursor(e, '')
       }}
     >
-      <Rect width={n.w} height={n.h} fill="transparent" />
-      {visual}
+      <Group rotation={rot}>
+        <Rect width={n.w} height={n.h} fill="transparent" />
+        {visual}
+      </Group>
+      {borderable && <SyntheticBorder el={el} />}
     </Group>
   )
 }

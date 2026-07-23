@@ -113,8 +113,13 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
       <Note key="ascii">{t('z_ascii_note')}</Note>,
       <NumberField key="font" label={t('z_fld_font')} value={S(e.font)} onChange={set('font', true)} />,
       <NumberField key="fontW" label={t('z_fontw')} value={S(e.fontW)} onChange={set('fontW', true)} />,
-      <NumberField key="w" label={t('z_fld_w')} value={S(e.w)} onChange={set('w', true)} />,
-      <NumberField key="maxLines" label={t('z_maxlines')} value={S(e.maxLines)} onChange={set('maxLines', true)} />,
+      <Checkbox key="block" label={t('z_text_block')} checked={e.block !== false} onChange={() => api.setField('block', e.block === false)} />,
+      ...(e.block === false
+        ? []
+        : [
+            <NumberField key="w" label={t('z_fld_w')} value={S(e.w)} onChange={set('w', true)} />,
+            <NumberField key="maxLines" label={t('z_maxlines')} value={S(e.maxLines)} onChange={set('maxLines', true)} />,
+          ]),
       <NumberField key="x" label={t('z_fld_x')} value={S(e.x)} onChange={set('x', true)} />,
       <NumberField key="y" label={t('z_fld_y')} value={S(e.y)} onChange={set('y', true)} />,
     )
@@ -239,7 +244,7 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
       )}
 
       {/* 텍스트 수평 정렬(회전 뒤) */}
-      {selEl.type === 'text' && (
+      {selEl.type === 'text' && selEl.block !== false && (
         <Segment
           label={t('z_align')}
           options={(['L', 'C', 'R', 'J'] as const).map((a) => ({ key: a, label: a, on: (selEl as TextElement).align === a, onClick: () => api.setField('align', a) }))}

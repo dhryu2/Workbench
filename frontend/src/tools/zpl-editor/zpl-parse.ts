@@ -3,12 +3,11 @@
 // 미지원 명령은 라인 번호와 함께 오류로 보고한다(조용한 무시 금지 — WYSIWYG 보장 원칙).
 //
 // 알려진 손실 변환(생성 형식의 구조상 불가피):
-// - 비트맵 글꼴은 확장 가능한 글꼴 모델로 근사된다.
-// - ^FR 반전 인쇄는 무시된다.
+// - 비트맵 글꼴은 대체 웹 글꼴과 셀 비율로 근사된다.
 // - 표는 ^GB 조각+텍스트로 평탄화되어 나가므로 개별 박스/선/텍스트로 복원된다.
 // - 합성 테두리(^GB)는 별도 박스 요소로 복원된다.
 import { sanitizeBarcodeData, sanitizeFieldData, sanitizeZplText } from './sanitize'
-import type { Align, BarcodeType, Ecc, Element, Rotation } from './types'
+import type { Align, BarcodeType, Ecc, Element, FontFace, Rotation } from './types'
 
 // id 없는 파싱 요소 — id 는 훅이 시퀀스로 부여한다. (유니온에 분배 적용되는 Omit)
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -72,6 +71,11 @@ const intAt = (parts: string[], i: number, dflt: number): number => {
 
 // 기본 합성 테두리(요소 스키마 필수 필드).
 const noBorder = () => ({ on: false, t: 2, pad: 6 })
+const fontFace = (value: string): FontFace => {
+  const face = value.toUpperCase()
+  return /^[0A-Z]$/.test(face) ? face as FontFace : '0'
+}
+const defaultFontWidth = (face: FontFace, height: number): number => (face === 'A' ? Math.max(1, Math.round(height * 5 / 9)) : height)
 
 export function parseZpl(txt: string): ParseResult {
   if (!/\^XA/.test(txt)) return { ok: false, code: 'no_xa', line: 1 }
@@ -82,14 +86,15 @@ export function parseZpl(txt: string): ParseResult {
   let pw: number | null = null
   let ll: number | null = null
   let module = 3 // ^BY 지속 상태
-  let cf: { h: number; w: number } | null = null
+  let byHeight = 100 // ^BY 기본 바 높이 지속 상태
+  let cf: { face: FontFace; h: number; w: number } | null = null
 
   // 열린 필드(^FO … ^FS) 상태
   interface Field {
     x: number
     y: number
     line: number
-    font?: { rot: Rotation; h: number; w: number }
+    font?: { face: FontFace; rot: Rotation; h: number; w: number }
     fb?: { w: number; lines: number; align: Align }
     fd?: string
     bc?: { kind: BarcodeType; rot: Rotation; h: number; hri: boolean }
@@ -97,7 +102,9 @@ export function parseZpl(txt: string): ParseResult {
     shape?: { kind: 'GB' | 'GE' | 'GC' | 'GD'; p: string[] }
     gfa?: { bytes: number; rowBytes: number; hex: string }
     fx?: boolean
+    reverse?: boolean
     module: number
+    byHeight: number
   }
   let f: Field | null = null
   let started = false
@@ -123,6 +130,7 @@ export function parseZpl(txt: string): ParseResult {
         free: true,
         rot: 0,
         border: noBorder(),
+        reverse: fld.reverse,
       })
       return null
     }
@@ -135,7 +143,7 @@ export function parseZpl(txt: string): ParseResult {
         ecc = m[1] as Ecc
         data = data.slice(m[0].length)
       }
-      els.push({ type: 'qr', x, y, data: sanitizeFieldData(data), mag: fld.qr.mag, ecc, rot: fld.qr.rot, border: noBorder() })
+      els.push({ type: 'qr', x, y, data: sanitizeFieldData(data), mag: fld.qr.mag, ecc, rot: fld.qr.rot, border: noBorder(), reverse: fld.reverse })
       return null
     }
     if (fld.bc) {
@@ -151,6 +159,7 @@ export function parseZpl(txt: string): ParseResult {
         hri: fld.bc.hri,
         rot: fld.bc.rot,
         border: noBorder(),
+        reverse: fld.reverse,
       })
       return null
     }
@@ -161,28 +170,28 @@ export function parseZpl(txt: string): ParseResult {
         const h = intAt(p, 1, 1)
         const t = intAt(p, 2, 1)
         // 생성 규칙 역추론: 두께와 같은 변은 선(line)으로 복원
-        if (h <= t && w > t) els.push({ type: 'line', x, y, dir: 'h', len: w, t })
-        else if (w <= t && h > t) els.push({ type: 'line', x, y, dir: 'v', len: h, t })
-        else els.push({ type: 'box', x, y, w, h, t })
+        if (h <= t && w > t) els.push({ type: 'line', x, y, dir: 'h', len: w, t, reverse: fld.reverse })
+        else if (w <= t && h > t) els.push({ type: 'line', x, y, dir: 'v', len: h, t, reverse: fld.reverse })
+        else els.push({ type: 'box', x, y, w, h, t, reverse: fld.reverse })
       } else if (fld.shape.kind === 'GE') {
-        els.push({ type: 'ellipse', x, y, w: intAt(p, 0, 1), h: intAt(p, 1, 1), t: intAt(p, 2, 1) })
+        els.push({ type: 'ellipse', x, y, w: intAt(p, 0, 1), h: intAt(p, 1, 1), t: intAt(p, 2, 1), reverse: fld.reverse })
       } else if (fld.shape.kind === 'GC') {
-        els.push({ type: 'circle', x, y, d: intAt(p, 0, 30), t: intAt(p, 1, 1) })
+        els.push({ type: 'circle', x, y, d: intAt(p, 0, 30), t: intAt(p, 1, 1), reverse: fld.reverse })
       } else {
         const dir = (p[3] || 'L').trim() === 'R' ? 'R' : 'L'
-        els.push({ type: 'diagonal', x, y, w: intAt(p, 0, 1), h: intAt(p, 1, 1), t: intAt(p, 2, 1), dir })
+        els.push({ type: 'diagonal', x, y, w: intAt(p, 0, 1), h: intAt(p, 1, 1), t: intAt(p, 2, 1), dir, reverse: fld.reverse })
       }
       return null
     }
     if (fld.font != null || fld.fd != null) {
       if (fld.fd == null) return { ok: false, code: 'bad', line }
-      const font = fld.font ?? (cf ? { rot: 0 as Rotation, h: cf.h, w: cf.w } : { rot: 0 as Rotation, h: 30, w: 30 })
+      const font = fld.font ?? (cf ? { face: cf.face, rot: 0 as Rotation, h: cf.h, w: cf.w } : { face: '0' as FontFace, rot: 0 as Rotation, h: 30, w: 30 })
       const text = sanitizeZplText(fld.fd.split('\\&').join('\n'))
       els.push({
         type: 'text',
         x,
         y,
-        w: fld.fb ? fld.fb.w : 360,
+        w: fld.fb ? fld.fb.w : 0,
         font: font.h,
         fontW: font.w,
         text,
@@ -190,6 +199,9 @@ export function parseZpl(txt: string): ParseResult {
         rot: font.rot,
         maxLines: fld.fb ? Math.max(1, fld.fb.lines) : 1,
         border: noBorder(),
+        block: fld.fb != null,
+        face: font.face,
+        reverse: fld.reverse,
       })
       return null
     }
@@ -217,12 +229,16 @@ export function parseZpl(txt: string): ParseResult {
       else if (c.code === 'LL') ll = intAt(p, 0, 0) || ll
       else if (c.code === 'CI') continue
       else if (c.code === 'CF') {
+        const face = fontFace(p[0] || cf?.face || '0')
         const h = intAt(p, 1, cf?.h ?? 30)
-        cf = { h, w: intAt(p, 2, h) }
+        cf = { face, h, w: intAt(p, 2, defaultFontWidth(face, h)) }
       }
-      else if (c.code === 'BY') module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
+      else if (c.code === 'BY') {
+        module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
+        byHeight = Math.max(1, intAt(p, 2, byHeight))
+      }
       else if (c.code === 'FX') continue
-      else if (c.code === 'FO') f = { x: intAt(p, 0, 0), y: intAt(p, 1, 0), line: c.line, module }
+      else if (c.code === 'FO') f = { x: intAt(p, 0, 0), y: intAt(p, 1, 0), line: c.line, module, byHeight }
       else if (c.code === 'FS') continue
       else return { ok: false, code: 'unsupported', line: c.line, cmd: '^' + c.code }
       continue
@@ -238,8 +254,10 @@ export function parseZpl(txt: string): ParseResult {
       return { ok: false, code: 'bad', line: c.line }
     } else if (c.code[0] === 'A' && c.code.length === 2) {
       // params: "N,56,56" (회전문자, 높이, 폭)
+      const face = fontFace(c.code[1])
       const rot = rotOf(p[0] || 'N')
-      f.font = { rot, h: intAt(p, 1, 30), w: intAt(p, 2, intAt(p, 1, 30)) }
+      const h = intAt(p, 1, 30)
+      f.font = { face, rot, h, w: intAt(p, 2, defaultFontWidth(face, h)) }
     } else if (c.code === 'FB') {
       const al = (p[3] || 'L').toUpperCase()
       f.fb = { w: intAt(p, 0, 360), lines: intAt(p, 1, 1), align: (['L', 'C', 'R', 'J'].includes(al) ? al : 'L') as Align }
@@ -248,16 +266,18 @@ export function parseZpl(txt: string): ParseResult {
     } else if (c.code === 'FX') {
       f.fx = true
     } else if (c.code === 'FR') {
-      // 반전 인쇄는 알려진 손실 변환으로 무시
+      f.reverse = true
     } else if (c.code === 'BY') {
       f.module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
+      f.byHeight = Math.max(1, intAt(p, 2, f.byHeight))
       module = f.module
+      byHeight = f.byHeight
     } else if (c.code === 'BC' || c.code === 'B3' || c.code === 'BE' || c.code === 'BU') {
       const rot = rotOf(p[0] || 'N')
-      if (c.code === 'BC') f.bc = { kind: 'code128', rot, h: intAt(p, 1, 100), hri: (p[2] || 'Y').toUpperCase() === 'Y' }
-      else if (c.code === 'B3') f.bc = { kind: 'code39', rot, h: intAt(p, 2, 100), hri: (p[3] || 'Y').toUpperCase() === 'Y' }
-      else if (c.code === 'BE') f.bc = { kind: 'ean13', rot, h: intAt(p, 1, 100), hri: (p[2] || 'Y').toUpperCase() === 'Y' }
-      else f.bc = { kind: 'upca', rot, h: intAt(p, 1, 100), hri: (p[2] || 'Y').toUpperCase() === 'Y' }
+      if (c.code === 'BC') f.bc = { kind: 'code128', rot, h: intAt(p, 1, f.byHeight), hri: (p[2] || 'Y').toUpperCase() === 'Y' }
+      else if (c.code === 'B3') f.bc = { kind: 'code39', rot, h: intAt(p, 2, f.byHeight), hri: (p[3] || 'Y').toUpperCase() === 'Y' }
+      else if (c.code === 'BE') f.bc = { kind: 'ean13', rot, h: intAt(p, 1, f.byHeight), hri: (p[2] || 'Y').toUpperCase() === 'Y' }
+      else f.bc = { kind: 'upca', rot, h: intAt(p, 1, f.byHeight), hri: (p[2] || 'Y').toUpperCase() === 'Y' }
     } else if (c.code === 'BQ') {
       const rot = rotOf(p[0] || 'N')
       const eccP = (p[3] || 'M').toUpperCase()

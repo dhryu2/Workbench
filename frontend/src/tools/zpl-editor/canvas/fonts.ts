@@ -6,8 +6,10 @@
 // 한글은 컨덴스드 Noto 가 없어 **Noto Sans KR 700** + scaleX(fontW/font) 장평 보정(§6.2)으로 맞춘다.
 import '@fontsource/roboto-condensed/700.css'
 import '@fontsource/noto-sans-kr/700.css'
+import type { FontFace } from '../types'
 
 export const LABEL_FONT = "'Roboto Condensed', 'Noto Sans KR', sans-serif"
+const LABEL_FONT_A = "monospace"
 
 // ^FB 줄간격(§6.4) — 핸드오프 기준 1.18 에서 시작(Labelary 대조 튜닝 지점).
 export const LABEL_LINE_HEIGHT = 1.18
@@ -18,7 +20,19 @@ let ready = false
 let pending: Promise<void> | null = null
 
 // middle 베이스라인 앵커 → alphabetic 베이스라인 거리(em 비율). 런타임 실측(브라우저/폰트 무관 보정).
-let middleToBaseline = 0.32 // 측정 실패 시 폴백(전형값)
+const middleToBaseline: Partial<Record<FontFace, number>> = { '0': 0.32, A: 0.32 }
+const capToBaseline: Partial<Record<FontFace, number>> = { '0': 0.75, A: 7 / 9 }
+
+export function labelFontFamily(face?: FontFace): string {
+  return face === 'A' ? LABEL_FONT_A : LABEL_FONT
+}
+
+export function labelFontScaleX(face: FontFace | undefined, fontSize: number, fontWidth: number): number {
+  if (fontSize <= 0) return 1
+  const requested = (fontWidth || fontSize) / fontSize
+  // CSS 고정폭 글꼴의 기본 셀 폭(약 0.6em)을 ZPL 글꼴 A의 5×9 셀 폭에 맞춘다.
+  return face === 'A' ? requested / 0.6 : requested
+}
 
 export function labelFontsReady(): boolean {
   return ready
@@ -26,8 +40,8 @@ export function labelFontsReady(): boolean {
 
 // Konva Text(내부 textBaseline='middle', 줄 앵커 = lineHeight/2)가 그린 글리프의 베이스라인을
 // ZPL ^A0 와 같은 위치(y + 0.75×h — CG Triumvirate 캡 높이, Labelary 실측)로 옮기는 offsetY.
-export function labelTextOffsetY(fontSize: number, lineHeight: number): number {
-  return (lineHeight / 2 + middleToBaseline - 0.75) * fontSize
+export function labelTextOffsetY(fontSize: number, lineHeight: number, face: FontFace = '0'): number {
+  return (lineHeight / 2 + (middleToBaseline[face] ?? middleToBaseline['0'] ?? 0.32) - (capToBaseline[face] ?? capToBaseline['0'] ?? 0.75)) * fontSize
 }
 
 export function loadLabelFonts(): Promise<void> {
@@ -39,17 +53,21 @@ export function loadLabelFonts(): Promise<void> {
         document.fonts.load("bold 32px 'Noto Sans KR'"),
       ])
       await document.fonts.ready
-      // 베이스라인 실측: middle 앵커 상승분과 alphabetic 상승분의 차 = 앵커→베이스라인 거리
+      // 베이스라인과 실제 대문자 상단을 글꼴별로 실측해 큰 글자에서도 오차가 비례 확대되지 않게 한다.
       const c = document.createElement('canvas')
       const x = c.getContext('2d')
       if (x) {
-        x.font = "700 100px 'Roboto Condensed', sans-serif"
-        x.textBaseline = 'alphabetic'
-        const a = x.measureText('H').actualBoundingBoxAscent
-        x.textBaseline = 'middle'
-        const m = x.measureText('H').actualBoundingBoxAscent
-        const r = (a - m) / 100
-        if (Number.isFinite(r) && r > 0 && r < 0.6) middleToBaseline = r
+        for (const face of ['0', 'A'] as const) {
+          x.font = face === 'A' ? '100px monospace' : "700 100px 'Roboto Condensed', sans-serif"
+          x.textBaseline = 'alphabetic'
+          const a = x.measureText('H').actualBoundingBoxAscent
+          x.textBaseline = 'middle'
+          const m = x.measureText('H').actualBoundingBoxAscent
+          const middle = (a - m) / 100
+          const cap = a / 100
+          if (Number.isFinite(middle) && middle > 0 && middle < 0.6) middleToBaseline[face] = middle
+          if (Number.isFinite(cap) && cap > 0.5 && cap < 1) capToBaseline[face] = cap
+        }
       }
     } catch {
       // 로드/측정 실패 시 폴백으로 진행(렌더는 계속되어야 한다)

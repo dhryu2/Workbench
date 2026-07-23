@@ -4,7 +4,7 @@
 // v2: 이미지 요소는 실제 ^GFA 헥스 데이터를 내보낸다(요소의 gfaHex — image-util.rasterize1bit 산출).
 // 여기서 나온 ZPL 은 Labelary/실프린터에서 캔버스와 동일하게 렌더되어야 하며(WYSIWYG),
 // 입력 문자셋 제약은 sanitize.ts 가 GUI 입력 단계에서 이미 보장한다.
-import { dpiFor, toDots, norm, tableW, tableH, mergedRect, isHidden } from './geometry'
+import { borderBox, dpiFor, toDots, tableW, tableH, mergedRect, isHidden } from './geometry'
 import type { Element, BorderableElement, TableElement, Rotation, ZplLine, ZplState } from './types'
 
 // 회전 코드: 0→N, 90→R, 180→I, 270→B.
@@ -17,15 +17,15 @@ function header(text: string): ZplLine {
   return { text, elId: null, isHeader: true }
 }
 
+const reverseZpl = (el: Element): string => (el.reverse ? '^FR' : '')
+
 // 합성 테두리(^GB) — border.on 일 때 요소 바깥에 사각형 하나를 더 그린다.
 // 반환은 0개(off) 또는 1개 문자열. 빈 문자열을 emit 하면 빈 ZPL 줄이 생기므로 배열로 처리한다.
 export function borderZpl(el: BorderableElement): string[] {
   const b = el.border
   if (!b || !b.on) return []
-  const p = b.pad || 0
-  const t = b.t || 2
-  const { w, h } = norm(el)
-  return [`^FO${el.x - p},${el.y - p}^GB${w + p * 2},${h + p * 2},${t}^FS`]
+  const box = borderBox(el)
+  return [`^FO${el.x + box.x},${el.y + box.y}^GB${box.w},${box.h},${box.t}^FS`]
 }
 
 // 요소 → ZPL 명령 줄(들). 테두리 있는 타입은 자기 명령 뒤에 border 를 이어 붙인다.
@@ -34,8 +34,10 @@ export function elZpl(el: Element): string[] {
     case 'text': {
       const t = String(el.text || '').split('\n').join('\\&')
       const rot = rotCode(el.rot)
+      const face = el.face || '0'
+      const block = el.block === false ? '' : `^FB${el.w},${el.maxLines || 1},0,${el.align || 'L'}`
       return [
-        `^FO${el.x},${el.y}^A0${rot},${el.font},${el.fontW || el.font}^FB${el.w},${el.maxLines || 1},0,${el.align || 'L'}^FD${t}^FS`,
+        `^FO${el.x},${el.y}${reverseZpl(el)}^A${face}${rot},${el.font},${el.fontW || el.font}${block}^FD${t}^FS`,
         ...borderZpl(el),
       ]
     }
@@ -47,13 +49,13 @@ export function elZpl(el: Element): string[] {
       else if (el.bcType === 'ean13') bc = `^BE${rot},${el.h},${hri},N`
       else if (el.bcType === 'upca') bc = `^BU${rot},${el.h},${hri},N`
       else bc = `^BC${rot},${el.h},${hri},N,N`
-      return [`^FO${el.x},${el.y}^BY${el.module || 3}${bc}^FD${el.data}^FS`, ...borderZpl(el)]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^BY${el.module || 3}${bc}^FD${el.data}^FS`, ...borderZpl(el)]
     }
     case 'qr': {
       const rot = rotCode(el.rot)
       // ECC 는 ^FD 접두(<ecc>A,)가 실효값 — Labelary/펌웨어는 ^BQ 4번째 파라미터를 무시한다(실측).
       const ecc = el.ecc || 'M'
-      return [`^FO${el.x},${el.y}^BQ${rot},2,${el.mag || 5},${ecc}^FD${ecc}A,${el.data}^FS`, ...borderZpl(el)]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^BQ${rot},2,${el.mag || 5},${ecc}^FD${ecc}A,${el.data}^FS`, ...borderZpl(el)]
     }
     case 'image': {
       // 래스터(gfaHex) 전이면 이미지 명령을 생략 — 가짜 데이터를 내보내지 않는다.
@@ -63,22 +65,22 @@ export function elZpl(el: Element): string[] {
       const rows = el.gfaRows ?? el.h
       const bytes = rowBytes * rows
       return [
-        `^FO${el.x},${el.y}^GFA,${bytes},${bytes},${rowBytes},${el.gfaHex}^FS`,
+        `^FO${el.x},${el.y}${reverseZpl(el)}^GFA,${bytes},${bytes},${rowBytes},${el.gfaHex}^FS`,
         ...borderZpl(el),
       ]
     }
     case 'box':
-      return [`^FO${el.x},${el.y}^GB${el.w},${el.h},${el.t}^FS`]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.w},${el.h},${el.t}^FS`]
     case 'ellipse':
-      return [`^FO${el.x},${el.y}^GE${el.w},${el.h},${el.t}^FS`]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GE${el.w},${el.h},${el.t}^FS`]
     case 'circle':
-      return [`^FO${el.x},${el.y}^GC${el.d},${el.t}^FS`]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GC${el.d},${el.t}^FS`]
     case 'line':
       return el.dir === 'v'
-        ? [`^FO${el.x},${el.y}^GB${el.t},${el.len},${el.t}^FS`]
-        : [`^FO${el.x},${el.y}^GB${el.len},${el.t},${el.t}^FS`]
+        ? [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.t},${el.len},${el.t}^FS`]
+        : [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.len},${el.t},${el.t}^FS`]
     case 'diagonal':
-      return [`^FO${el.x},${el.y}^GD${el.w},${el.h},${el.t},${el.dir || 'L'}^FS`]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GD${el.w},${el.h},${el.t},${el.dir || 'L'}^FS`]
     case 'table':
       return tableZpl(el)
     default: {

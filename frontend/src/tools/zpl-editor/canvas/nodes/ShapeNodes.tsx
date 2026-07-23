@@ -9,10 +9,11 @@ type ShapeElement = BoxElement | EllipseElement | CircleElement | LineElement | 
 
 export function ShapeNode({ el, zoom }: { el: ShapeElement; zoom: number }) {
   const minT = 1 / zoom
+  const composite = el.reverse ? 'xor' : 'source-over'
   switch (el.type) {
     case 'box': {
       const t = Math.min(Math.max(el.t, minT), el.w / 2, el.h / 2)
-      return <Rect x={t / 2} y={t / 2} width={el.w - t} height={el.h - t} stroke={INK} strokeWidth={t} listening={false} />
+      return <Rect x={t / 2} y={t / 2} width={el.w - t} height={el.h - t} stroke={INK} strokeWidth={t} globalCompositeOperation={composite} listening={false} />
     }
     case 'ellipse': {
       const t = Math.min(Math.max(el.t, minT), el.w / 2, el.h / 2)
@@ -24,17 +25,18 @@ export function ShapeNode({ el, zoom }: { el: ShapeElement; zoom: number }) {
           radiusY={(el.h - t) / 2}
           stroke={INK}
           strokeWidth={t}
+          globalCompositeOperation={composite}
           listening={false}
         />
       )
     }
     case 'circle': {
       const t = Math.min(Math.max(el.t, minT), el.d / 2)
-      return <Circle x={el.d / 2} y={el.d / 2} radius={(el.d - t) / 2} stroke={INK} strokeWidth={t} listening={false} />
+      return <Circle x={el.d / 2} y={el.d / 2} radius={(el.d - t) / 2} stroke={INK} strokeWidth={t} globalCompositeOperation={composite} listening={false} />
     }
     case 'line': {
       const n = norm(el)
-      return <Rect width={n.w} height={n.h} fill={INK} listening={false} />
+      return <Rect width={n.w} height={n.h} fill={INK} globalCompositeOperation={composite} listening={false} />
     }
     case 'diagonal':
       return (
@@ -42,6 +44,7 @@ export function ShapeNode({ el, zoom }: { el: ShapeElement; zoom: number }) {
           points={el.dir === 'R' ? [0, el.h, el.w, 0] : [0, 0, el.w, el.h]}
           stroke={INK}
           strokeWidth={Math.max(el.t, minT)}
+          globalCompositeOperation={composite}
           listening={false}
         />
       )

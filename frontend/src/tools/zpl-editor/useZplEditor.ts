@@ -29,6 +29,52 @@ function patchEl(el: Element, patch: Patch): Element {
   return { ...el, ...patch } as Element
 }
 
+async function writeClipboardText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // 권한 거부·비보안 컨텍스트이면 동기 폴백을 시도한다.
+  }
+
+  const textarea = document.createElement('textarea')
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  textarea.value = text
+  textarea.readOnly = true
+  textarea.setAttribute('aria-hidden', 'true')
+  Object.assign(textarea.style, {
+    position: 'fixed',
+    top: '-9999px',
+    left: '-9999px',
+    opacity: '0',
+    pointerEvents: 'none',
+  })
+  document.body.appendChild(textarea)
+  try {
+    textarea.focus({ preventScroll: true })
+  } catch {
+    textarea.focus()
+  }
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+  let copied = false
+  try {
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  } finally {
+    textarea.remove()
+    try {
+      active?.focus({ preventScroll: true })
+    } catch {
+      // 기존 포커스 복원 실패는 복사 성공 여부에 영향을 주지 않는다.
+    }
+  }
+  return copied
+}
+
 // 스냅샷용 얕은 요소 복사(중첩 구조는 편집 시 항상 새로 만들므로 공유 안전).
 function cloneEls(els: Element[]): Element[] {
   return els.map((e) => ({ ...e }))
@@ -343,7 +389,7 @@ export function useZplEditor(t: TFunction) {
         const y = 130
         let el: Element
         if (type === 'text')
-          el = { id, type, x, y, w: 360, font: 38, fontW: 38, text: tr('z_new_text'), align: 'L', rot: 0, maxLines: 1, border: { on: false, t: 2, pad: 6 } }
+          el = { id, type, x, y, w: 360, font: 38, fontW: 38, text: tr('z_new_text'), align: 'L', rot: 0, maxLines: 1, border: { on: false, t: 2, pad: 6 }, block: true, face: '0' }
         else if (type === 'barcode')
           el = { id, type, x, y, bcType: 'code128', data: '1234567890', module: 3, h: 150, hri: true, rot: 0, border: { on: false, t: 2, pad: 8 } }
         else if (type === 'qr')
@@ -882,15 +928,12 @@ export function useZplEditor(t: TFunction) {
   }, [pushPast])
 
   // ── 코드 복사(1.4s "Copied") ──
-  const copyZpl = useCallback(() => {
+  const copyZpl = useCallback(async () => {
     const txt = buildZpl(zRef.current).map((l) => l.text).join('\n')
-    try {
-      void navigator.clipboard?.writeText(txt)
-    } catch {
-      // 클립보드 접근 실패는 무시
-    }
-    patchZ({ copied: true })
+    const copied = await writeClipboardText(txt)
     window.clearTimeout(copyTimer.current)
+    patchZ({ copied })
+    if (!copied) return
     copyTimer.current = window.setTimeout(() => patchZ({ copied: false }), 1400)
   }, [patchZ])
 
