@@ -2,7 +2,6 @@
 import { useTranslation } from 'react-i18next'
 import { EditorStage } from './canvas/EditorStage'
 import { CodePanel } from './CodePanel'
-import { PreviewPane } from './PreviewPane'
 import { PropertiesPanel } from './PropertiesPanel'
 import { StatusBar } from './StatusBar'
 import { Toolbar } from './Toolbar'
@@ -21,7 +20,7 @@ export function ZplEditorTool() {
       <Toolbar api={api} />
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {z.mode === 'edit' ? <EditorStage api={api} /> : <PreviewPane api={api} />}
+        <EditorStage api={api} />
         {z.codeOpen && <CodePanel api={api} />}
         <PropertiesPanel api={api} />
       </div>

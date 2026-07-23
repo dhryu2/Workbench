@@ -73,18 +73,18 @@ export function OverlayLayer({ api, tagText }: { api: ZplEditorApi; tagText: str
 
   // hover(비선택) 점선 외곽 — v1 outline offset 2px 화면 등가
   let hoverBox: BBox | null = null
-  if (z.mode === 'edit' && z.hover && z.hover !== z.sel) {
+  if (z.hover && z.hover !== z.sel) {
     const he = z.els.find((e) => e.id === z.hover)
     if (he) hoverBox = elBBox(he)
   }
 
-  const selBox = selEl && z.mode === 'edit' ? elBBox(selEl) : null
+  const selBox = selEl ? elBBox(selEl) : null
   const round = !!selEl && (selEl.type === 'qr' || selEl.type === 'circle' || (selEl.type === 'image' && !selEl.free))
   const handles = selEl && selBox ? handlesFor(selEl) : []
 
   // 표 구분선(표 전체 선택 시) — 10 화면픽셀 폭 히트 바 + 중앙 액센트 라인
   const dividers: { key: string; isCol: boolean; i: number; x: number; y: number; w: number; h: number }[] = []
-  if (selEl && selEl.type === 'table' && z.mode === 'edit' && !z.selCell) {
+  if (selEl && selEl.type === 'table' && !z.selCell) {
     const sn = norm(selEl)
     let cx = 0
     for (let i = 0; i < selEl.cols.length - 1; i++) {

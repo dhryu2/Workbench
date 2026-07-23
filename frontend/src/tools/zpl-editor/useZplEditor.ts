@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { TFunction } from 'i18next'
 import { HISTORY_MAX, ZOOM_MAX, ZOOM_MIN } from './types'
-import type { Dpmm, Element, Merge, TableCell, TableElement, Unit, ZplState } from './types'
+import type { BarcodeType, Dpmm, Element, Merge, TableCell, TableElement, Unit, ZplState } from './types'
 import { dpiFor, mergeAt, norm, toDots } from './geometry'
 import { buildZpl } from './zpl-generate'
-import { SEED_ELEMENTS, SEED_SPEC } from './seed'
-import { makeEmblem, rasterize1bit } from './image-util'
+import { parseZpl } from './zpl-parse'
+import { gfaHexToDataUrl, makeEmblem, rasterize1bit } from './image-util'
+import { sanitizeBarcodeData, sanitizeFieldData, sanitizeZplText } from './sanitize'
 
 // 포인터 다운 이벤트의 최소 형태 — React 합성 이벤트와 Konva 의 원시 PointerEvent(e.evt)를
 // 모두 구조적으로 수용한다(§5.4: 수식/임계/히스토리 의미는 불변, 이벤트 타입만 중립화).
@@ -144,15 +145,13 @@ function mergeRectOf(t: TableElement, cells: { r: number; c: number }[]): Merge 
   return { r: minR, c: minC, rs, cs }
 }
 
-// 시드 초기 상태 생성 — 이미지 요소는 src 가 없으면 엠블럼으로 채운다(레퍼런스와 동일 비주얼).
+// 기본 라벨 스펙: 4×6 in @ 8dpmm(203dpi).
+const DEFAULT_SPEC = { unit: 'in' as Unit, w: '4', h: '6', dpmm: 8 as Dpmm }
+
+// 초기 상태 — 빈 라벨에서 시작한다(v2: 데모 시드 제거).
 function makeInitialState(): ZplState {
-  const emblem = makeEmblem()
-  const els: Element[] = SEED_ELEMENTS.map((e) => {
-    if (e.type === 'image' && !e.src && emblem) return { ...e, orig: emblem, src: emblem }
-    return { ...e }
-  })
   return {
-    els,
+    els: [],
     sel: null,
     hover: null,
     selCell: null,
@@ -167,44 +166,36 @@ function makeInitialState(): ZplState {
     tableCols: '3',
     dragId: null,
     drag: null,
-    mode: 'edit',
     zoom: 0.42,
     next: 100,
     copied: false,
-    unit: SEED_SPEC.unit as Unit,
-    w: SEED_SPEC.w,
-    h: SEED_SPEC.h,
-    dpmm: SEED_SPEC.dpmm as Dpmm,
+    unit: DEFAULT_SPEC.unit,
+    w: DEFAULT_SPEC.w,
+    h: DEFAULT_SPEC.h,
+    dpmm: DEFAULT_SPEC.dpmm,
     past: [],
     future: [],
     clip: null,
-    statusMsg: null,
   }
 }
 
 const BORDERABLE = new Set(['text', 'barcode', 'qr', 'image'])
 
-interface PreviewState {
-  url: string | null
-  loading: boolean
-  error: string | null
-}
-
-// 샘플 ZPL(가져오기 다이얼로그 초기값) — 프로토타입 `_sampleZpl`.
+// 샘플 ZPL(가져오기 다이얼로그 초기값) — 파서가 지원하는 명령만 사용(영문/ASCII).
 const SAMPLE_ZPL = [
   '^XA',
   '^PW812',
   '^LL1218',
   '^CI28',
-  '^FO52,50^A0N,56,56^FB596,1,0,C^FD부품 라벨 / PART LABEL^FS',
-  '^FO604,50^BQN,2,5,M^FDLA,WB-4061-203^FS',
-  '^FO52,648^BY3^BCN,170,Y,N,N^FD8829301047^FS',
+  '^FO52,50^A0N,56,56^FB596,1,0,C^FDPART LABEL^FS',
+  '^FO52,140^GB700,3,3^FS',
+  '^FO600,180^BQN,2,5,M^FDMA,WB-4061-203^FS',
+  '^FO52,220^BY3^BCN,170,Y,N,N^FD8829301047^FS',
   '^XZ',
 ].join('\n')
 
 export function useZplEditor(t: TFunction) {
   const [z, setZ] = useState<ZplState>(makeInitialState)
-  const [preview, setPreview] = useState<PreviewState>({ url: null, loading: false, error: null })
 
   // 이벤트 핸들러가 최신 상태를 동기적으로 읽기 위한 미러 ref.
   const zRef = useRef(z)
@@ -219,7 +210,6 @@ export function useZplEditor(t: TFunction) {
 
   const editSig = useRef<string | null>(null)
   const copyTimer = useRef<number | undefined>(undefined)
-  const previewUrlRef = useRef<string | null>(null)
 
   const patchZ = useCallback((p: Partial<ZplState>) => {
     setZ((s) => ({ ...s, ...p }))
@@ -252,7 +242,6 @@ export function useZplEditor(t: TFunction) {
   const clearHover = useCallback(() => patchZ({ hover: null }), [patchZ])
 
   const toggleCode = useCallback(() => setZ((s) => ({ ...s, codeOpen: !s.codeOpen })), [])
-  const setMode = useCallback((m: 'edit' | 'preview') => patchZ({ mode: m }), [patchZ])
   const zoomBy = useCallback((d: number) => {
     setZ((s) => ({ ...s, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +(s.zoom + d).toFixed(2))) }))
   }, [])
@@ -316,6 +305,26 @@ export function useZplEditor(t: TFunction) {
     })
   }, [pushPast])
 
+  // ── 이미지 재래스터(업로드/리사이즈/임계값·디더 변경 후) ──
+  // setTimeout(0) 으로 커밋 이후(zRef 최신화 후) 최신 w/h/threshold 를 읽어 래스터화한다.
+  // 결과의 src(캔버스 프리뷰)와 hex(^GFA 데이터)는 같은 1비트 픽셀에서 나온다 — WYSIWYG 보장.
+  const reraster = useCallback((id: string) => {
+    window.setTimeout(() => {
+      const el = zRef.current.els.find((e) => e.id === id)
+      if (!el || el.type !== 'image' || !el.orig) return
+      void rasterize1bit(el.orig, el.w, el.h, el.threshold, el.dither).then((r) => {
+        if (r)
+          mapEls((els) =>
+            els.map((x) =>
+              x.id === id && x.type === 'image'
+                ? { ...x, src: r.src, gfaHex: r.hex, gfaRowBytes: r.rowBytes, gfaRows: r.rows }
+                : x,
+            ),
+          )
+      })
+    }, 0)
+  }, [mapEls])
+
   // ── 삽입 ──
   const openTableDialog = useCallback(() => patchZ({ tableDialog: true, tableRows: '3', tableCols: '3' }), [patchZ])
   const closeTableDialog = useCallback(() => patchZ({ tableDialog: false }), [patchZ])
@@ -349,8 +358,10 @@ export function useZplEditor(t: TFunction) {
         else el = { id, type: 'line', x, y, dir: 'h', len: 400, t: 4 }
         return { ...s, els: [...s.els, el], sel: id, selCell: null, selCells: [], next: s.next + 1 }
       })
+      // 이미지 요소는 추가 직후 래스터해 src/gfaHex 를 채운다(id 는 커밋될 시퀀스와 동일).
+      if (type === 'image') reraster('z' + zRef.current.next)
     },
-    [openTableDialog, pushPast],
+    [openTableDialog, pushPast, reraster],
   )
 
   const deleteSel = useCallback(() => {
@@ -360,30 +371,31 @@ export function useZplEditor(t: TFunction) {
     setZ((st) => ({ ...st, els: st.els.filter((e) => e.id !== st.sel), sel: null, selCell: null, selCells: [] }))
   }, [pushPast])
 
-  // ── 이미지 재래스터(업로드/리사이즈/임계값·디더 변경 후) ──
-  // setTimeout(0) 으로 커밋 이후(zRef 최신화 후) 최신 w/h/threshold 를 읽어 래스터화한다.
-  const reraster = useCallback((id: string) => {
-    window.setTimeout(() => {
-      const el = zRef.current.els.find((e) => e.id === id)
-      if (!el || el.type !== 'image' || !el.orig) return
-      void rasterize1bit(el.orig, el.w, el.h, el.threshold, el.dither).then((src) => {
-        if (src) mapEls((els) => els.map((x) => (x.id === id && x.type === 'image' ? { ...x, src } : x)))
-      })
-    }, 0)
-  }, [mapEls])
-
   // ── 속성 필드 변경 ──
   const setField = useCallback(
     (key: string, val: string | number | boolean, numeric?: boolean) => {
       const s = zRef.current
       const id = s.sel
       if (!id) return
+      const target = s.els.find((e) => e.id === id)
+      if (!target) return
       pushPast(id + ':' + key)
       let v: string | number | boolean = numeric ? (typeof val === 'number' ? val : parseInt(String(val), 10) || 0) : val
-      // 제약 패리티(§2): ^A0 최소 글리프 높이/폭 10dot, ^BQ 배율 1–10 정수 — 필드 레벨에서도 강제
+      // 제약 패리티: ZPL 파라미터 유효범위를 필드 레벨에서 강제
       if (typeof v === 'number') {
-        if (key === 'font' || key === 'fontW') v = Math.max(10, v)
-        else if (key === 'mag') v = Math.max(1, Math.min(10, v))
+        if (key === 'font' || key === 'fontW') v = Math.max(10, v) // ^A0 최소 글리프 10dot
+        else if (key === 'mag' || key === 'module') v = Math.max(1, Math.min(10, v)) // ^BQ 배율·^BY 모듈 1–10
+        else if (key === 'threshold') v = Math.max(0, Math.min(255, v))
+        else if (key === 'maxLines') v = Math.max(1, v)
+        else if (key === 't') v = Math.max(1, v) // ^GB/^GE/^GC/^GD 두께 ≥1
+        else if (key === 'border.t') v = Math.max(1, v)
+        else if (key === 'x' || key === 'y' || key === 'border.pad') v = Math.max(0, v)
+        else if (key === 'w' || key === 'h' || key === 'len' || key === 'd') v = Math.max(1, v)
+      }
+      // 문자 제약: ZPL 내장 폰트/^FD 가 출력 가능한 문자만(비ASCII·제어문자 차단)
+      if (typeof v === 'string') {
+        if (key === 'text') v = sanitizeZplText(v)
+        else if (key === 'data') v = target.type === 'barcode' ? sanitizeBarcodeData(target.bcType, v) : sanitizeFieldData(v)
       }
       mapEls((els) =>
         els.map((e) => {
@@ -391,6 +403,10 @@ export function useZplEditor(t: TFunction) {
           if (key.indexOf('border.') === 0) {
             const cur = 'border' in e ? e.border : { on: false, t: 2, pad: 6 }
             return patchEl(e, { border: { ...cur, [key.slice(7)]: v } })
+          }
+          // 심볼로지 변경 시 기존 데이터를 새 문자셋으로 재정제
+          if (key === 'bcType' && e.type === 'barcode') {
+            return patchEl(e, { bcType: v, data: sanitizeBarcodeData(v as BarcodeType, e.data) })
           }
           return patchEl(e, { [key]: v })
         }),
@@ -420,7 +436,6 @@ export function useZplEditor(t: TFunction) {
     (id: string, ev: PointerLike) => {
       ev.stopPropagation()
       const s = zRef.current
-      if (s.mode !== 'edit') return
       const el = s.els.find((x) => x.id === id)
       if (!el) return
       const sx = ev.clientX
@@ -462,7 +477,6 @@ export function useZplEditor(t: TFunction) {
       ev.stopPropagation()
       ev.preventDefault()
       const s = zRef.current
-      if (s.mode !== 'edit') return
       const el0 = s.els.find((e) => e.id === id)
       if (!el0) return
       const zoom = s.zoom
@@ -579,26 +593,46 @@ export function useZplEditor(t: TFunction) {
   const setImportText = useCallback((text: string) => patchZ({ importText: text, importError: null }), [patchZ])
   const doImport = useCallback(() => {
     const txt = zRef.current.importText || ''
-    const lines = txt.split('\n')
-    // 오류 규칙(순서대로): ^XA 없음 → ^XZ 없음 → ^XQ(미지원) 포함. 오류코드를 저장하고 다이얼로그가 번역한다.
-    if (!/\^XA/.test(txt)) {
-      patchZ({ importError: 'no_xa' })
-      return
-    }
-    if (!/\^XZ/.test(txt)) {
-      patchZ({ importError: 'no_xz' })
-      return
-    }
-    const badIdx = lines.findIndex((l) => /\^XQ/.test(l))
-    if (badIdx >= 0) {
-      patchZ({ importError: 'xq|' + (badIdx + 1) })
+    // 실제 역파서(zpl-parse) — 오류코드를 저장하고 다이얼로그가 번역한다.
+    const res = parseZpl(txt)
+    if (!res.ok) {
+      const code =
+        res.code === 'unsupported'
+          ? `unsupported|${res.cmd || '?'}|${res.line}`
+          : res.code === 'xq' || res.code === 'bad'
+            ? `${res.code}|${res.line}`
+            : res.code
+      patchZ({ importError: code })
       return
     }
     pushPast()
-    // TODO(phase-2): 실제 ZPL 역파서. 현재는 검증만 실제 수행하고 시드 요소를 재생성한다.
-    // (역파싱기는 zpl-generate 의 명령 매핑을 역방향으로 구현 — 이 자리에 스왑인)
-    setZ((s) => ({ ...s, els: cloneEls(makeInitialState().els), sel: null, importOpen: false, importError: null }))
-  }, [patchZ, pushPast])
+    const base = zRef.current.next
+    const withIds: Element[] = res.els.map((pe, i) => ({ ...pe, id: 'z' + (base + i) }) as Element)
+    setZ((s) => {
+      const dpi = dpiFor(s.dpmm)
+      // ^PW/^LL(dot) → 현재 단위 환산해 라벨 크기 반영
+      const cv = (dots: number) => (s.unit === 'mm' ? +(((dots / dpi) * 25.4).toFixed(1)) : +((dots / dpi).toFixed(2)))
+      return {
+        ...s,
+        els: withIds,
+        next: base + withIds.length,
+        sel: null,
+        selCell: null,
+        selCells: [],
+        importOpen: false,
+        importError: null,
+        w: res.pw ? String(cv(res.pw)) : s.w,
+        h: res.ll ? String(cv(res.ll)) : s.h,
+      }
+    })
+    // ^GFA 이미지의 캔버스 프리뷰 복원(헥스 → dataURL, 동기)
+    for (const el of withIds) {
+      if (el.type === 'image' && el.gfaHex && !el.src) {
+        const src = gfaHexToDataUrl(el.gfaHex, el.gfaRowBytes ?? Math.ceil(el.w / 8), el.gfaRows ?? el.h)
+        if (src) mapEls((els) => els.map((x) => (x.id === el.id && x.type === 'image' ? { ...x, src, orig: src } : x)))
+      }
+    }
+  }, [mapEls, patchZ, pushPast])
 
   // ── 표 삽입 ──
   const setTableRows = useCallback((v: string) => patchZ({ tableRows: v }), [patchZ])
@@ -625,7 +659,6 @@ export function useZplEditor(t: TFunction) {
     (id: string, r: number, c: number, ev: PointerLike) => {
       ev.stopPropagation()
       const s = zRef.current
-      if (s.mode !== 'edit') return
       if (ev.ctrlKey || ev.metaKey) {
         // Ctrl/Cmd+클릭: 멀티선택 토글(병합 후보)
         setZ((st) => {
@@ -715,11 +748,14 @@ export function useZplEditor(t: TFunction) {
       if (!sc) return
       const k = sc.r + '_' + sc.c
       let v: string | number = numeric ? (typeof val === 'number' ? val : parseInt(String(val), 10) || 0) : val
-      // 셀도 동일 제약(§2): 셀 텍스트는 ^A0(최소 10dot), 셀 QR 은 ^BQ 배율 1–10
+      // 셀도 동일 제약: 셀 텍스트는 ^A0(최소 10dot), 셀 QR 은 ^BQ 배율 1–10, 패딩 ≥0
       if (typeof v === 'number') {
         if (key === 'font') v = Math.max(10, v)
         else if (key === 'mag') v = Math.max(1, Math.min(10, v))
+        else if (key === 'pad') v = Math.max(0, v)
       }
+      // 셀 텍스트/데이터는 단일 라인 ^FD 로 나가므로 개행 없는 ASCII 로 정제
+      if (typeof v === 'string' && (key === 'text' || key === 'data')) v = sanitizeFieldData(v)
       pushPast(s.sel + ':' + k + ':' + key)
       mapEls((els) =>
         els.map((e) => {
@@ -740,14 +776,13 @@ export function useZplEditor(t: TFunction) {
       if (!sc) return
       const k = sc.r + '_' + sc.c
       pushPast()
-      const emblem = makeEmblem()
       mapEls((els) =>
         els.map((e) => {
           if (e.id !== s.sel || e.type !== 'table') return e
           const cells = { ...e.cells }
           const cur = cells[k] || ({ type: 'text', halign: 'L', valign: 'mid' } as TableCell)
           const base = { halign: cur.halign || 'L', valign: cur.valign || 'mid' }
-          // 타입 변경 시 정렬은 유지하고 기본 데이터를 세팅
+          // 타입 변경 시 정렬은 유지하고 기본 데이터를 세팅 ('image' 셀 타입은 v2 에서 제거)
           cells[k] =
             val === 'text'
               ? { ...base, type: 'text', text: cur.text || tRef.current('z_type_text'), font: cur.font || 30 }
@@ -755,9 +790,7 @@ export function useZplEditor(t: TFunction) {
                 ? { ...base, type: 'qr', data: cur.data || 'DATA', mag: 4 }
                 : val === 'barcode'
                   ? { ...base, type: 'barcode', data: cur.data || '123456' }
-                  : val === 'image'
-                    ? { ...base, type: 'image', data: emblem }
-                    : { ...base, type: 'empty' }
+                  : { ...base, type: 'empty' }
           return { ...e, cells }
         }),
       )
@@ -840,6 +873,13 @@ export function useZplEditor(t: TFunction) {
   )
   const colDivDown = useCallback((id: string, i: number, ev: PointerLike) => divDown(id, i, ev, true), [divDown])
   const rowDivDown = useCallback((id: string, i: number, ev: PointerLike) => divDown(id, i, ev, false), [divDown])
+
+  // ── 전체 초기화 — 모든 요소 제거(빈 라벨). 히스토리에 남아 undo 가능. ──
+  const resetAll = useCallback(() => {
+    if (!zRef.current.els.length) return
+    pushPast()
+    setZ((s) => ({ ...s, els: [], sel: null, selCell: null, selCells: [], dragId: null, drag: null }))
+  }, [pushPast])
 
   // ── 코드 복사(1.4s "Copied") ──
   const copyZpl = useCallback(() => {
@@ -954,49 +994,9 @@ export function useZplEditor(t: TFunction) {
     return () => window.removeEventListener('keydown', onKey)
   }, [closeSetup, closeImport, closeTableDialog, deselect, undo, redo, copySel, pasteClip, deleteSel, nudge])
 
-  // ── Labelary 미리보기(실 API) ──
-  useEffect(() => {
-    if (z.mode !== 'preview') return
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      setPreview((p) => ({ ...p, loading: true, error: null }))
-      const wIn = z.unit === 'mm' ? (parseFloat(z.w) || 0) / 25.4 : parseFloat(z.w) || 0
-      const hIn = z.unit === 'mm' ? (parseFloat(z.h) || 0) / 25.4 : parseFloat(z.h) || 0
-      const r2 = (v: number) => Math.round(v * 100) / 100
-      const url = `https://api.labelary.com/v1/printers/${z.dpmm}dpmm/labels/${r2(wIn)}x${r2(hIn)}/0/`
-      // Content-Type 미지정 시 fetch 가 text/plain 으로 보내 Labelary 가 415 를 반환한다.
-      fetch(url, {
-        method: 'POST',
-        headers: { Accept: 'image/png', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: zplText,
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const reason = await res.text().catch(() => '')
-            if (!cancelled) setPreview({ url: null, loading: false, error: reason || `HTTP ${res.status}` })
-            return
-          }
-          const blob = await res.blob()
-          if (cancelled) return
-          const obj = URL.createObjectURL(blob)
-          if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-          previewUrlRef.current = obj
-          setPreview({ url: obj, loading: false, error: null })
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) setPreview({ url: null, loading: false, error: err instanceof Error ? err.message : String(err) })
-        })
-    }, 400)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [z.mode, zplText, z.dpmm, z.unit, z.w, z.h])
-
-  // 언마운트 시 객체 URL·타이머 정리.
+  // 언마운트 시 타이머 정리.
   useEffect(() => {
     return () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
       window.clearTimeout(copyTimer.current)
     }
   }, [])
@@ -1004,7 +1004,6 @@ export function useZplEditor(t: TFunction) {
   return {
     // 상태
     z,
-    preview,
     // 파생
     dpi,
     PW,
@@ -1020,6 +1019,7 @@ export function useZplEditor(t: TFunction) {
     canRedo: z.future.length > 0,
     canCopy: !!z.sel,
     canPaste: !!z.clip,
+    canReset: z.els.length > 0,
     // 삽입/선택/편집
     addEl,
     selectEl,
@@ -1034,15 +1034,15 @@ export function useZplEditor(t: TFunction) {
     resizeDown,
     nudge,
     imgUpload,
-    // 히스토리/클립보드/줌/모드/코드
+    // 히스토리/클립보드/줌/코드/초기화
     undo,
     redo,
     copySel,
     pasteClip,
     zoomBy,
-    setMode,
     toggleCode,
     copyZpl,
+    resetAll,
     // 설정
     openSetup,
     closeSetup,

@@ -32,14 +32,13 @@ function ElementNode({ el, api, zoom, imageLabel }: { el: Element; api: ZplEdito
   if (el.type === 'table') return <TableNode t={el} api={api} zoom={zoom} />
   const n = norm(el)
   const rot = 'rot' in el ? el.rot : 0
-  const editing = api.z.mode === 'edit'
   let visual: ReactNode
   switch (el.type) {
     case 'text':
       visual = <TextNode el={el} />
       break
     case 'barcode':
-      visual = <BarcodeNode el={el} zoom={zoom} />
+      visual = <BarcodeNode el={el} />
       break
     case 'qr':
       visual = <QrNode el={el} />
@@ -58,7 +57,7 @@ function ElementNode({ el, api, zoom, imageLabel }: { el: Element; api: ZplEdito
       onPointerDown={(e) => api.elPointerDown(el.id, e.evt)}
       onPointerEnter={(e) => {
         api.hoverEl(el.id)
-        if (editing) setCursor(e, 'move')
+        setCursor(e, 'move')
       }}
       onPointerLeave={(e) => {
         api.clearHover()

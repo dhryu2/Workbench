@@ -6,13 +6,12 @@ import {
   ClipboardPaste,
   Code,
   Copy,
-  Eye,
   FileInput,
   Image as ImageIcon,
   Minus,
-  Pencil,
   Plus,
   QrCode,
+  RotateCcw,
   ScanLine,
   Slash,
   SlidersHorizontal,
@@ -81,33 +80,6 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
     </button>
   )
 
-  const modeOpt = (m: 'edit' | 'preview', icon: LucideIcon, label: string) => {
-    const on = z.mode === m
-    return (
-      <button
-        type="button"
-        onClick={() => api.setMode(m)}
-        className={'wb-zpl-seg-opt' + (on ? ' on' : '')}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '6px 11px',
-          fontFamily: HEADING,
-          fontWeight: 600,
-          fontSize: 13,
-          cursor: 'pointer',
-          border: 'none',
-          background: on ? 'var(--wb-color-accent)' : 'transparent',
-          color: on ? 'var(--wb-color-bg)' : 'var(--wb-color-text)',
-        }}
-      >
-        <Icon icon={icon} size={15} />
-        {label}
-      </button>
-    )
-  }
-
   return (
     <div
       style={{
@@ -170,11 +142,17 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
       {/* 스페이서 */}
       <div style={{ flex: 1, minWidth: 12 }} />
 
-      {/* 모드 세그먼트 */}
-      <div style={{ display: 'flex', border: '1px solid var(--wb-color-divider)', height: 32 }}>
-        {modeOpt('edit', Pencil, t('z_edit'))}
-        {modeOpt('preview', Eye, t('z_preview'))}
-      </div>
+      {/* 전체 초기화(undo 가능) */}
+      <button
+        type="button"
+        onClick={api.resetAll}
+        disabled={!api.canReset}
+        className="wb-btn wb-btn-secondary"
+        style={{ height: 32, gap: 6, fontSize: 13, opacity: api.canReset ? 1 : 0.45 }}
+      >
+        <Icon icon={RotateCcw} size={15} />
+        {t('z_reset')}
+      </button>
 
       {/* ZPL 코드 토글 */}
       <button type="button" onClick={api.toggleCode} className="wb-btn wb-btn-secondary" style={{ height: 32, gap: 6, fontSize: 13 }}>

@@ -1,6 +1,7 @@
 // 실제 QR 모듈 행렬(§6.3) — 캔버스가 스케일된 <img> 대신 진짜 모듈 격자를 그리기 위한 소스.
 // geometry.qrModules 와 동일한 인코딩 경로를 쓰되, 행렬 전체를 (data, ecc) 키로 캐시한다.
 import qrcode from 'qrcode-generator'
+import { qrMode } from '../geometry'
 import type { Ecc } from '../types'
 
 export interface QrMatrixData {
@@ -16,10 +17,11 @@ export function qrMatrix(data: string, ecc: Ecc): QrMatrixData | null {
   if (hit !== undefined) return hit
   let out: QrMatrixData | null
   try {
-    // ESM 빌드 기본 stringToBytes 는 Latin1 절단 — 한글 안전하게 UTF-8 로 교체(qr-encode.ts 와 동일)
+    // ESM 빌드 기본 stringToBytes 는 Latin1 절단 — UTF-8 로 교체(qr-encode.ts 와 동일)
     qrcode.stringToBytes = (s: string) => Array.from(new TextEncoder().encode(s))
     const qr = qrcode(0, ecc)
-    qr.addData(data || '', 'Byte')
+    // ZPL 자동 입력과 동일한 모드 선택(geometry.qrMode) — 버전/크기 일치의 핵심
+    qr.addData(data || '', qrMode(data || ''))
     qr.make()
     const n = qr.getModuleCount()
     const dark: boolean[][] = []

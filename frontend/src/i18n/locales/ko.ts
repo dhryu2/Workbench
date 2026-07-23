@@ -48,10 +48,9 @@ export const ko = {
   // ── ZPL 에디터 ──
   // 툴바
   z_insert: '삽입',
-  z_edit: '편집',
-  z_preview: '미리보기',
   z_code: 'ZPL 코드',
   z_import: '가져오기',
+  z_reset: '초기화',
   z_undo: '실행 취소 (Ctrl+Z)',
   z_redo: '다시 실행 (Ctrl+Y)',
   z_copy_el: '요소 복사 (Ctrl+C)',
@@ -118,6 +117,12 @@ export const ko = {
   z_bctype: '바코드 타입',
   z_hri: '사람이 읽는 텍스트 (HRI)',
   z_bc_fit: '폭 = 데이터 + 모듈 (가로 리사이즈 불가)',
+  z_ascii_note: '인쇄 가능한 ASCII(영문)만 입력 가능 — ZPL 내장 폰트는 다른 문자를 출력하지 못합니다.',
+  z_bc_charset_code128: '인쇄 가능한 ASCII만 (Code 128).',
+  z_bc_charset_code39: 'Code 39 문자셋: 0–9 A–Z − . 공백 $ / + % (자동 대문자 변환).',
+  z_bc_charset_ean13: 'EAN-13: 숫자 12자리 — 체크 디지트는 자동 추가됩니다.',
+  z_bc_charset_upca: 'UPC-A: 숫자 11자리 — 체크 디지트는 자동 추가됩니다.',
+  z_bc_approx: 'EAN/UPC 캔버스 미리보기는 근사치입니다 — 프린터는 자체 가드/HRI 배치를 사용합니다. 실제 프린터에서 확인하세요.',
   // QR
   z_ecc: '오류정정',
   // 이미지
@@ -130,7 +135,7 @@ export const ko = {
   z_bthick: '테두리 두께 (dot)',
   z_bpad: '패딩 (dot)',
   z_synthetic: 'ZPL 네이티브 아님 · 합성 명령으로 출력',
-  z_verify: '펌웨어 편차 — Labelary 렌더로 검증 필요',
+  z_verify: '회전 지원은 프린터 펌웨어에 따라 다름 — 실제 프린터에서 확인하세요.',
   // 표
   z_whole_table: '표 전체 선택',
   z_cell_type: '셀 콘텐츠 타입',
@@ -169,9 +174,11 @@ export const ko = {
   z_err_no_xa: '^XA 시작 지시자를 찾을 수 없습니다 (1번째 줄).',
   z_err_no_xz: '^XZ 종료 지시자가 없습니다. 라벨 블록이 닫히지 않았습니다.',
   z_err_xq: '알 수 없는 지시자 ^XQ — {{n}}번째 줄. 지원되는 명령이 아닙니다.',
+  z_err_bad: 'ZPL 형식 오류 — {{n}}번째 줄 부근.',
+  z_err_unsupported: '지원하지 않는 명령 {{cmd}} — {{n}}번째 줄.',
   // 설정 다이얼로그
   z_setup: '라벨 설정',
-  z_setup_body: '라벨 크기·단위·인쇄 밀도를 설정합니다. ^PW · ^LL 값과 미리보기에 즉시 반영됩니다.',
+  z_setup_body: '라벨 크기·단위·인쇄 밀도를 설정합니다. ^PW · ^LL 값과 캔버스에 즉시 반영됩니다.',
   z_unit: '단위',
   z_unit_in: '인치 (in)',
   z_unit_mm: '밀리미터 (mm)',
@@ -180,11 +187,6 @@ export const ko = {
   z_density: '인쇄 밀도',
   z_output: '출력 크기',
   z_done: '완료',
-  // 미리보기 모드
-  z_preview_hint: '실물 렌더 미리보기',
-  z_preview_loading: '라벨 렌더링 중…',
-  z_preview_error: '미리보기 렌더 실패',
-  z_preview_egress: '미리보기는 라벨 내용을 Labelary.com으로 전송해 렌더링합니다.',
   // 상태바
   z_status_hint: '방향키 1 dot · Shift+방향키 10 dot',
   z_status_cell: '표 셀 · R{{r}} · C{{c}}',

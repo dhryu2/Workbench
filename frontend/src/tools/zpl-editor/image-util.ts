@@ -1,7 +1,11 @@
 // 이미지 유틸 — 캔버스(DOM) 기반. 엔진(순수 모듈)과 분리한 UI 전용 헬퍼다.
-// support.js `_makeEmblem`/`_raster` 를 그대로 옮겼다(그레이스케일 → 임계값 이진화 → 선택적 Floyd–Steinberg 디더).
+// 그레이스케일 → 임계값 이진화 → 선택적 Floyd–Steinberg 디더.
+//
+// v2 핵심: 래스터는 **정확히 w×h dot** 로 수행한다. 이 1비트 픽셀이
+// ① 캔버스 프리뷰(src, 픽셀 보간 없이 확대)와 ② ^GFA 헥스(gfaHex) 의 공통 소스가 되어
+// 에디터 화면과 프린터/Labelary 출력이 이미지에 한해 비트 단위로 일치한다.
 
-// "WB" 엠블럼 PNG data URL 생성 — 시드/신규 이미지·셀 이미지의 기본 비주얼.
+// "WB" 엠블럼 PNG data URL 생성 — 신규 이미지 요소의 기본 비주얼.
 // 캔버스 접근 불가(SSR 등) 시 undefined 를 반환한다.
 export function makeEmblem(): string | undefined {
   try {
@@ -28,15 +32,23 @@ export function makeEmblem(): string | undefined {
   }
 }
 
-// 원본 data URL 을 w×h·threshold·dither 로 1-bit 흑백 래스터화한 PNG data URL 을 반환한다(미리보기용).
-// 실패 시 null. (실제 ZPL 출력엔 비트맵 대신 플레이스홀더 ^GFA 주석이 나감 — zpl-generate.ts)
+// 래스터 결과: src = 1비트 픽셀 그대로의 PNG data URL(프리뷰), hex = ^GFA 데이터(행당 rowBytes).
+// rowBytes/rows 는 hex 와 같은 래스터의 치수(헤더 정합용).
+export interface RasterResult {
+  src: string
+  hex: string
+  rowBytes: number
+  rows: number
+}
+
+// 원본 data URL 을 w×h·threshold·dither 로 1비트 래스터화. 실패 시 null.
 export function rasterize1bit(
   orig: string | undefined,
   w: number,
   h: number,
   threshold: number,
   dither: boolean,
-): Promise<string | null> {
+): Promise<RasterResult | null> {
   return new Promise((resolve) => {
     if (!orig || typeof document === 'undefined') {
       resolve(null)
@@ -45,10 +57,8 @@ export function rasterize1bit(
     const img = new Image()
     img.onload = () => {
       try {
-        // 표시 크기가 작아도 최소한의 해상도를 확보하기 위한 업스케일(최대 3배)
-        const sc = Math.min(3, Math.max(1, Math.floor(360 / Math.max(w, h, 1))))
-        const pw = Math.max(1, Math.round(w * sc))
-        const ph = Math.max(1, Math.round(h * sc))
+        const pw = Math.max(1, Math.round(w))
+        const ph = Math.max(1, Math.round(h))
         const c = document.createElement('canvas')
         c.width = pw
         c.height = ph
@@ -86,6 +96,22 @@ export function rasterize1bit(
             }
           }
         }
+        // ^GFA 헥스: 행당 ceil(w/8) 바이트, MSB 우선, 검정=1. 마지막 바이트 잔여 비트는 0(흰색).
+        const rowBytes = Math.ceil(pw / 8)
+        const hexRows: string[] = []
+        for (let y = 0; y < ph; y++) {
+          let row = ''
+          for (let bx = 0; bx < rowBytes; bx++) {
+            let byte = 0
+            for (let bit = 0; bit < 8; bit++) {
+              const x = bx * 8 + bit
+              if (x < pw && g[y * pw + x] === 0) byte |= 0x80 >> bit
+            }
+            row += byte.toString(16).padStart(2, '0').toUpperCase()
+          }
+          hexRows.push(row)
+        }
+        // 프리뷰 픽셀 되쓰기(이진화 결과 그대로)
         for (let i = 0; i < pw * ph; i++) {
           const j = i * 4
           const v = g[i]
@@ -93,7 +119,7 @@ export function rasterize1bit(
           d[j + 3] = 255
         }
         ctx.putImageData(idata, 0, 0)
-        resolve(c.toDataURL('image/png'))
+        resolve({ src: c.toDataURL('image/png'), hex: hexRows.join(''), rowBytes, rows: ph })
       } catch {
         resolve(null)
       }
@@ -101,4 +127,38 @@ export function rasterize1bit(
     img.onerror = () => resolve(null)
     img.src = orig
   })
+}
+
+// ^GFA 헥스 → 1비트 PNG data URL(가져오기 시 캔버스 프리뷰 복원). 실패 시 null.
+export function gfaHexToDataUrl(hex: string, rowBytes: number, rows: number): string | null {
+  try {
+    if (typeof document === 'undefined' || rowBytes < 1 || rows < 1) return null
+    const clean = hex.replace(/[^0-9A-Fa-f]/g, '')
+    const w = rowBytes * 8
+    const c = document.createElement('canvas')
+    c.width = w
+    c.height = rows
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
+    const idata = ctx.createImageData(w, rows)
+    const d = idata.data
+    for (let y = 0; y < rows; y++) {
+      for (let bx = 0; bx < rowBytes; bx++) {
+        const hi = (y * rowBytes + bx) * 2
+        const byte = parseInt(clean.slice(hi, hi + 2) || '00', 16)
+        for (let bit = 0; bit < 8; bit++) {
+          const x = bx * 8 + bit
+          const black = (byte & (0x80 >> bit)) !== 0
+          const j = (y * w + x) * 4
+          const v = black ? 0 : 255
+          d[j] = d[j + 1] = d[j + 2] = v
+          d[j + 3] = 255
+        }
+      }
+    }
+    ctx.putImageData(idata, 0, 0)
+    return c.toDataURL('image/png')
+  } catch {
+    return null
+  }
 }

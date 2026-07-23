@@ -30,12 +30,12 @@ const C128: string[] = [
 ]
 const START_B = 104
 const STOP = 106
-const QUIET = 10
 
-// 패턴 문자열 배열 → 막대 목록. 앞뒤 quiet zone 포함.
+// 패턴 문자열 배열 → 막대 목록. quiet zone 은 포함하지 않는다 —
+// ZPL/Labelary 는 ^FO 위치에서 곧바로 첫 막대를 인쇄한다(실측). 좌표 단위 = 모듈.
 function patternsToBars(patterns: string[]): BarcodeBars {
   const bars: Bar[] = []
-  let x = QUIET
+  let x = 0
   for (const pat of patterns) {
     for (let i = 0; i < pat.length; i++) {
       const wdt = pat.charCodeAt(i) - 48
@@ -43,7 +43,7 @@ function patternsToBars(patterns: string[]): BarcodeBars {
       x += wdt
     }
   }
-  return { bars, total: x + QUIET }
+  return { bars, total: x }
 }
 
 function code128(data: string): BarcodeBars {
@@ -80,7 +80,7 @@ function code39(data: string): BarcodeBars {
   const inner = [...String(data).toUpperCase()].filter((c) => c in C39 && c !== '*')
   const chars = ['*', ...inner, '*']
   const bars: Bar[] = []
-  let x = QUIET
+  let x = 0
   chars.forEach((c, ci) => {
     const pat = C39[c]
     for (let i = 0; i < pat.length; i++) {
@@ -90,7 +90,7 @@ function code39(data: string): BarcodeBars {
     }
     if (ci < chars.length - 1) x += 1 // 문자 사이 narrow 공백
   })
-  return { bars, total: x + QUIET }
+  return { bars, total: x }
 }
 
 // ── EAN-13 / UPC-A ─────────────────────────────────────────────────────
@@ -119,10 +119,35 @@ function digits(data: string, n: number): number[] {
   return [...only].map((c) => c.charCodeAt(0) - 48)
 }
 
-// 비트열(0/1, 각 1모듈) → 막대 목록. 연속된 1을 하나의 막대로 묶는다.
-function bitsToBars(bits: string, quietL: number, quietR: number): BarcodeBars {
+// GTIN 체크 디지트(EAN-13/UPC-A 공통) — 오른쪽 끝에서 홀수 위치 가중 3.
+// 프린터가 자동 계산해 붙이는 값과 동일해야 캔버스 줄무늬가 인쇄물과 일치한다.
+function gtinCheck(ds: number[]): number {
+  let sum = 0
+  for (let i = 0; i < ds.length; i++) {
+    const fromRight = ds.length - 1 - i
+    sum += ds[i] * (fromRight % 2 === 0 ? 3 : 1)
+  }
+  return (10 - (sum % 10)) % 10
+}
+
+// HRI 표시 문자열 — EAN/UPC 는 체크 디지트를 포함해 인쇄된다(Labelary 동일).
+export function hriText(bcType: BarcodeType, data: string): string {
+  if (bcType === 'ean13') {
+    const d = digits(data, 12)
+    return d.join('') + gtinCheck(d)
+  }
+  if (bcType === 'upca') {
+    const d = digits(data, 11)
+    return d.join('') + gtinCheck(d)
+  }
+  if (bcType === 'code39') return String(data ?? '').toUpperCase()
+  return String(data ?? '')
+}
+
+// 비트열(0/1, 각 1모듈) → 막대 목록. 연속된 1을 하나의 막대로 묶는다. quiet zone 미포함.
+function bitsToBars(bits: string): BarcodeBars {
   const bars: Bar[] = []
-  let x = quietL
+  let x = 0
   let i = 0
   while (i < bits.length) {
     if (bits[i] === '1') {
@@ -138,34 +163,38 @@ function bitsToBars(bits: string, quietL: number, quietR: number): BarcodeBars {
       i++
     }
   }
-  return { bars, total: x + quietR }
+  return { bars, total: x }
 }
 
 function ean13(data: string): BarcodeBars {
-  const d = digits(data, 13)
+  // 데이터 12자리 + 체크 디지트 계산(프린터 동작 재현)
+  const d12 = digits(data, 12)
+  const d = [...d12, gtinCheck(d12)]
   const parity = EAN_PARITY[d[0]]
   let bits = '101' // 시작 가드
   for (let i = 0; i < 6; i++) bits += parity[i] === 'L' ? L[d[i + 1]] : G[d[i + 1]]
   bits += '01010' // 센터 가드
   for (let i = 7; i < 13; i++) bits += R[d[i]]
   bits += '101' // 종료 가드
-  return bitsToBars(bits, 11, 7)
+  return bitsToBars(bits)
 }
 
 function upca(data: string): BarcodeBars {
-  const d = digits(data, 12)
+  // 데이터 11자리 + 체크 디지트 계산(프린터 동작 재현)
+  const d11 = digits(data, 11)
+  const d = [...d11, gtinCheck(d11)]
   let bits = '101' // 시작 가드
   for (let i = 0; i < 6; i++) bits += L[d[i]]
   bits += '01010' // 센터 가드
   for (let i = 6; i < 12; i++) bits += R[d[i]]
   bits += '101' // 종료 가드
-  return bitsToBars(bits, 9, 9)
+  return bitsToBars(bits)
 }
 
 // 심볼로지 실패/미지원 시 결정적 폴백 패턴(문자 코드 기반). 절대 throw 하지 않기 위한 안전망.
 function fallbackBars(data: string): BarcodeBars {
   const bars: Bar[] = []
-  let x = QUIET
+  let x = 0
   const s = data || '0'
   for (let i = 0; i < s.length; i++) {
     const code = s.charCodeAt(i)
@@ -175,7 +204,7 @@ function fallbackBars(data: string): BarcodeBars {
       x += w + 1 // 막대 + narrow 공백
     }
   }
-  return { bars, total: x + QUIET }
+  return { bars, total: x }
 }
 
 // 공개 진입점: 심볼로지별 인코딩. 입력이 부적합해도 폴백으로 항상 결과를 낸다.

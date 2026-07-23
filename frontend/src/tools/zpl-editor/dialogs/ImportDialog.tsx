@@ -9,11 +9,16 @@ export function ImportDialog({ api }: { api: ZplEditorApi }) {
   const { t } = useTranslation()
   const { z } = api
 
-  // 오류코드 → 번역 메시지
+  // 오류코드 → 번역 메시지 (형식: 'no_xa' | 'no_xz' | 'xq|N' | 'bad|N' | 'unsupported|^CMD|N')
   let errorDetail: string | null = null
   if (z.importError === 'no_xa') errorDetail = t('z_err_no_xa')
   else if (z.importError === 'no_xz') errorDetail = t('z_err_no_xz')
   else if (z.importError && z.importError.indexOf('xq|') === 0) errorDetail = t('z_err_xq', { n: z.importError.slice(3) })
+  else if (z.importError && z.importError.indexOf('bad|') === 0) errorDetail = t('z_err_bad', { n: z.importError.slice(4) })
+  else if (z.importError && z.importError.indexOf('unsupported|') === 0) {
+    const parts = z.importError.split('|')
+    errorDetail = t('z_err_unsupported', { cmd: parts[1] || '?', n: parts[2] || '?' })
+  }
 
   const validReady = !z.importError && /\^XA/.test(z.importText) && /\^XZ/.test(z.importText)
 

@@ -2,15 +2,14 @@
 // 인쇄물과 일치시킨다(v1 은 셀마다 CSS border 를 그려 내부선이 2t 로 두꺼웠다).
 // 셀 콘텐츠도 생성 ZPL 좌표(패딩·valign 수식)를 그대로 재현한다. 셀 히트 Rect 가
 // cellDown(클릭=선택, Ctrl/Cmd=멀티, 드래그=표 이동)을 이어받는다.
-import { Group, Image as KonvaImage, Rect, Text } from 'react-konva'
+import { Group, Rect, Text } from 'react-konva'
 import type { ReactNode } from 'react'
-import { bcWidth, cellRect, isHidden, mergeAt, mergedRect, tableH, tableW } from '../../geometry'
+import { QR_Y_OFFSET, bcWidth, cellRect, isHidden, mergeAt, mergedRect, tableH, tableW } from '../../geometry'
 import type { Rect as CellRect } from '../../geometry'
 import { BarsShape } from './BarcodeNode'
 import { QrMatrixShape } from './QrNode'
-import { useHtmlImage } from '../use-html-image'
 import { INK, PAPER, cssVar } from '../theme'
-import { LABEL_FONT } from '../fonts'
+import { LABEL_FONT, labelTextOffsetY } from '../fonts'
 import type { BarcodeElement, TableCell, TableElement } from '../../types'
 import type { ZplEditorApi } from '../../useZplEditor'
 import type { KonvaEventObject } from 'konva/lib/Node'
@@ -21,27 +20,8 @@ function setCursor(e: KonvaEventObject<PointerEvent>, cursor: string) {
   if (st) st.container().style.cursor = cursor
 }
 
-// 셀 이미지 — 콘텐츠 영역에 contain 맞춤(생성 ZPL 이 셀 이미지 크기를 아직 지정하지 않으므로 v1 시각 유지).
-function CellImage({ src, rect, pad }: { src: string; rect: CellRect; pad: number }) {
-  const img = useHtmlImage(src)
-  if (!img || !img.width || !img.height) return null
-  const aw = Math.max(0, rect.w - pad * 2)
-  const ah = Math.max(0, rect.h - pad * 2)
-  const r = Math.min(aw / img.width, ah / img.height)
-  return (
-    <KonvaImage
-      image={img}
-      x={rect.x + pad}
-      y={rect.y + pad}
-      width={img.width * r}
-      height={img.height * r}
-      imageSmoothingEnabled={false}
-      listening={false}
-    />
-  )
-}
-
 // 셀 콘텐츠 — 좌표/크기는 tableZpl 의 ^FO/^A0/^BQ/^BC 파라미터와 동일한 수식.
+// ('image' 셀 타입은 v2 에서 제거 — 실제 ^GFA 를 만들 수 없어 WYSIWYG 보장 불가였음)
 function CellContentNode({ table, cell, rect }: { table: TableElement; cell: TableCell; rect: CellRect }) {
   const pad = cell.pad != null ? cell.pad : table.pad
   if (cell.type === 'text') {
@@ -53,6 +33,7 @@ function CellContentNode({ table, cell, rect }: { table: TableElement; cell: Tab
       <Text
         x={rect.x + pad}
         y={y}
+        offsetY={labelTextOffsetY(f, 1)}
         width={inner}
         text={cell.text || ''}
         align={cell.halign === 'C' ? 'center' : cell.halign === 'R' ? 'right' : 'left'}
@@ -66,7 +47,8 @@ function CellContentNode({ table, cell, rect }: { table: TableElement; cell: Tab
     )
   }
   if (cell.type === 'qr') {
-    return <QrMatrixShape x={rect.x + pad} y={rect.y + pad} data={cell.data || ''} ecc="M" mag={cell.mag || 4} />
+    // 인쇄물과 동일한 +10dot 오프셋(요소 QR 과 같은 규칙)
+    return <QrMatrixShape x={rect.x + pad} y={rect.y + pad + QR_Y_OFFSET} data={cell.data || ''} ecc="M" mag={cell.mag || 4} />
   }
   if (cell.type === 'barcode') {
     const data = cell.data || ''
@@ -74,7 +56,6 @@ function CellContentNode({ table, cell, rect }: { table: TableElement; cell: Tab
     const h = Math.max(0, rect.h - pad * 2)
     return <BarsShape x={rect.x + pad} y={rect.y + pad} bcType="code128" data={data} w={w} h={h} />
   }
-  if (cell.type === 'image' && cell.data) return <CellImage src={cell.data} rect={rect} pad={pad} />
   return null
 }
 
@@ -84,7 +65,6 @@ export function TableNode({ t, api, zoom }: { t: TableElement; api: ZplEditorApi
   const th = tableH(t)
   const bt = Math.max(t.t, 1 / zoom)
   const accent = cssVar('--wb-color-accent', '#3b6ef5')
-  const editing = z.mode === 'edit'
 
   // 내부 세로 세그먼트 — tableZpl ② 와 동일한 병합 스킵 규칙
   const vSegs: { key: string; x: number; y: number; h: number }[] = []
@@ -159,12 +139,8 @@ export function TableNode({ t, api, zoom }: { t: TableElement; api: ZplEditorApi
           height={rect.h}
           fill="transparent"
           onPointerDown={(e) => api.cellDown(t.id, r, c, e.evt)}
-          onPointerEnter={(e) => {
-            if (editing) setCursor(e, 'pointer')
-          }}
-          onPointerLeave={(e) => {
-            if (editing) setCursor(e, 'move')
-          }}
+          onPointerEnter={(e) => setCursor(e, 'pointer')}
+          onPointerLeave={(e) => setCursor(e, 'move')}
         />,
       )
     }
@@ -176,7 +152,7 @@ export function TableNode({ t, api, zoom }: { t: TableElement; api: ZplEditorApi
       y={t.y}
       onPointerEnter={(e) => {
         api.hoverEl(t.id)
-        if (editing) setCursor(e, 'move')
+        setCursor(e, 'move')
       }}
       onPointerLeave={(e) => {
         api.clearHover()

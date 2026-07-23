@@ -17,8 +17,17 @@ export const LABEL_LINE_HEIGHT = 1.18
 let ready = false
 let pending: Promise<void> | null = null
 
+// middle 베이스라인 앵커 → alphabetic 베이스라인 거리(em 비율). 런타임 실측(브라우저/폰트 무관 보정).
+let middleToBaseline = 0.32 // 측정 실패 시 폴백(전형값)
+
 export function labelFontsReady(): boolean {
   return ready
+}
+
+// Konva Text(내부 textBaseline='middle', 줄 앵커 = lineHeight/2)가 그린 글리프의 베이스라인을
+// ZPL ^A0 와 같은 위치(y + 0.75×h — CG Triumvirate 캡 높이, Labelary 실측)로 옮기는 offsetY.
+export function labelTextOffsetY(fontSize: number, lineHeight: number): number {
+  return (lineHeight / 2 + middleToBaseline - 0.75) * fontSize
 }
 
 export function loadLabelFonts(): Promise<void> {
@@ -30,8 +39,20 @@ export function loadLabelFonts(): Promise<void> {
         document.fonts.load("bold 32px 'Noto Sans KR'"),
       ])
       await document.fonts.ready
+      // 베이스라인 실측: middle 앵커 상승분과 alphabetic 상승분의 차 = 앵커→베이스라인 거리
+      const c = document.createElement('canvas')
+      const x = c.getContext('2d')
+      if (x) {
+        x.font = "700 100px 'Roboto Condensed', sans-serif"
+        x.textBaseline = 'alphabetic'
+        const a = x.measureText('H').actualBoundingBoxAscent
+        x.textBaseline = 'middle'
+        const m = x.measureText('H').actualBoundingBoxAscent
+        const r = (a - m) / 100
+        if (Number.isFinite(r) && r > 0 && r < 0.6) middleToBaseline = r
+      }
     } catch {
-      // 로드 실패 시 sans-serif 폴백으로 진행(렌더는 계속되어야 한다)
+      // 로드/측정 실패 시 폴백으로 진행(렌더는 계속되어야 한다)
     }
     ready = true
   })()

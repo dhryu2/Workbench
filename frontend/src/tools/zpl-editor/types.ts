@@ -29,7 +29,8 @@ export interface Merge {
 }
 
 // ── 표 셀 ──
-export type CellType = 'text' | 'qr' | 'barcode' | 'image' | 'empty'
+// (v2: 'image' 셀 타입 제거 — 업로드 UI 가 없고 실제 ^GFA 를 만들 수 없어 WYSIWYG 보장 불가)
+export type CellType = 'text' | 'qr' | 'barcode' | 'empty'
 export type CellHAlign = 'L' | 'C' | 'R'
 export type CellVAlign = 'top' | 'mid' | 'bot'
 
@@ -91,6 +92,12 @@ export interface ImageElement extends BaseElement {
   h: number
   orig?: string
   src?: string
+  // 정확히 w×h dot 로 래스터한 1비트 비트맵의 ^GFA 헥스 데이터(래스터 완료 전엔 undefined).
+  // gfaRowBytes/gfaRows 는 래스터 시점의 치수 — 리사이즈 직후 비동기 재래스터가 끝나기 전에도
+  // ^GFA 헤더(바이트 수)와 데이터 길이가 항상 일치하도록 hex 와 한 세트로 저장한다.
+  gfaHex?: string
+  gfaRowBytes?: number
+  gfaRows?: number
   threshold: number
   dither: boolean
   free: boolean
@@ -162,8 +169,6 @@ export type Element =
 export type BorderableElement = TextElement | BarcodeElement | QrElement | ImageElement
 
 // ── 에디터 상태 ──
-export type EditorMode = 'edit' | 'preview'
-
 export interface CellRef {
   r: number
   c: number
@@ -198,7 +203,6 @@ export interface ZplState {
   tableCols: string
   dragId: string | null
   drag: DragGhost | null
-  mode: EditorMode
   zoom: number
   next: number
   copied: boolean
@@ -209,7 +213,6 @@ export interface ZplState {
   past: HistorySnapshot[]
   future: HistorySnapshot[]
   clip: Element | null
-  statusMsg: string | null
 }
 
 // ZPL 출력 한 줄. 헤더/푸터(^XA/^PW/^LL/^CI28/^XZ)는 isHeader=true, elId=null.

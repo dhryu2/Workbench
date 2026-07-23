@@ -110,6 +110,7 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
     const e = selEl as TextElement
     base.push(
       <AreaField key="text" label={t('z_fld_content')} value={S(e.text)} onChange={set('text')} />,
+      <Note key="ascii">{t('z_ascii_note')}</Note>,
       <NumberField key="font" label={t('z_fld_font')} value={S(e.font)} onChange={set('font', true)} />,
       <NumberField key="fontW" label={t('z_fontw')} value={S(e.fontW)} onChange={set('fontW', true)} />,
       <NumberField key="w" label={t('z_fld_w')} value={S(e.w)} onChange={set('w', true)} />,
@@ -121,6 +122,7 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
     const e = selEl as BarcodeElement
     base.push(
       <TextField key="data" label={t('z_fld_data')} value={S(e.data)} onChange={set('data')} />,
+      <Note key="ascii">{t('z_bc_charset_' + e.bcType)}</Note>,
       <NumberField key="module" label={t('z_module')} value={S(e.module)} onChange={set('module', true)} />,
       <NumberField key="h" label={t('z_fld_h')} value={S(e.h)} onChange={set('h', true)} />,
       <NumberField key="x" label={t('z_fld_x')} value={S(e.x)} onChange={set('x', true)} />,
@@ -130,6 +132,7 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
     const e = selEl as QrElement
     base.push(
       <TextField key="data" label={t('z_fld_data')} value={S(e.data)} onChange={set('data')} />,
+      <Note key="ascii">{t('z_ascii_note')}</Note>,
       <NumberField key="mag" label={t('z_mag_step')} value={S(e.mag)} onChange={set('mag', true)} />,
       <NumberField key="x" label={t('z_fld_x')} value={S(e.x)} onChange={set('x', true)} />,
       <NumberField key="y" label={t('z_fld_y')} value={S(e.y)} onChange={set('y', true)} />,
@@ -198,6 +201,7 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
           />
           <Checkbox label={t('z_hri')} checked={selEl.hri} onChange={() => api.toggleField('hri')} />
           <InfoBox>{t('z_bc_fit')}</InfoBox>
+          {(selEl.bcType === 'ean13' || selEl.bcType === 'upca') && <WarnBox>{t('z_bc_approx')}</WarnBox>}
         </>
       )}
       {selEl.type === 'qr' && (
@@ -348,7 +352,6 @@ function CellPanel({ api, table, cell, info }: { api: ZplEditorApi; table: Table
           { value: 'text', label: t('z_text') },
           { value: 'qr', label: t('z_qr') },
           { value: 'barcode', label: t('z_barcode') },
-          { value: 'image', label: t('z_image') },
           { value: 'empty', label: t('z_cell_empty') },
         ]}
         onChange={(v) => api.setCellType(v as TableCell['type'])}
@@ -358,16 +361,23 @@ function CellPanel({ api, table, cell, info }: { api: ZplEditorApi; table: Table
       {cell.type === 'text' && (
         <>
           <AreaField label={t('z_fld_content')} value={String(cell.text ?? '')} onChange={(v) => api.setCellField('text', v)} />
+          <Note>{t('z_ascii_note')}</Note>
           <NumberField label={t('z_fld_font')} value={String(cell.font ?? 30)} onChange={(v) => api.setCellField('font', v, true)} />
         </>
       )}
       {cell.type === 'qr' && (
         <>
           <TextField label={t('z_fld_data')} value={String(cell.data ?? '')} onChange={(v) => api.setCellField('data', v)} />
+          <Note>{t('z_ascii_note')}</Note>
           <NumberField label={t('z_mag_step')} value={String(cell.mag ?? 4)} onChange={(v) => api.setCellField('mag', v, true)} />
         </>
       )}
-      {cell.type === 'barcode' && <TextField label={t('z_fld_data')} value={String(cell.data ?? '')} onChange={(v) => api.setCellField('data', v)} />}
+      {cell.type === 'barcode' && (
+        <>
+          <TextField label={t('z_fld_data')} value={String(cell.data ?? '')} onChange={(v) => api.setCellField('data', v)} />
+          <Note>{t('z_ascii_note')}</Note>
+        </>
+      )}
 
       {/* 정렬(Empty 제외) */}
       {cell.type !== 'empty' && (

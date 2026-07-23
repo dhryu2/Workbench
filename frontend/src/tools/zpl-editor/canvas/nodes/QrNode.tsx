@@ -1,8 +1,9 @@
 // QR 노드 — 실제 인코더 모듈 행렬을 mag 크기 정사각형으로 그린다(§6.3, 어떤 줌에서도 선명).
 // 스케일된 <img> 를 쓰지 않는다. 인코딩 실패 시 흰 박스 폴백(v1 동일).
+// 인쇄물은 ^FO y 에서 +10dot 아래에 찍히므로(QR_Y_OFFSET 실측) 캔버스도 동일 오프셋으로 그린다.
 import { useMemo } from 'react'
 import { Rect, Shape } from 'react-konva'
-import { norm } from '../../geometry'
+import { QR_Y_OFFSET, qrSize } from '../../geometry'
 import { qrMatrix } from '../qr-matrix'
 import { INK, PAPER } from '../theme'
 import type { Ecc, QrElement } from '../../types'
@@ -47,12 +48,12 @@ export function QrMatrixShape({
 }
 
 export function QrNode({ el }: { el: QrElement }) {
-  const size = norm(el).w
+  const size = qrSize(el)
   return (
     <>
       {/* 파생 크기 흰 바탕 — 인코딩 실패 시에도 v1 처럼 흰 박스가 남는다 */}
-      <Rect width={size} height={size} fill={PAPER} listening={false} />
-      <QrMatrixShape data={el.data} ecc={el.ecc || 'M'} mag={el.mag || 5} />
+      <Rect y={QR_Y_OFFSET} width={size} height={size} fill={PAPER} listening={false} />
+      <QrMatrixShape y={QR_Y_OFFSET} data={el.data} ecc={el.ecc || 'M'} mag={el.mag || 5} />
     </>
   )
 }

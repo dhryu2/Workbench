@@ -1,49 +1,9 @@
 // ZPL II 코드 생성기 — GUI 라벨 상태 → 정확한 ZPL 문자열. 이 도구의 핵심 로직.
-// support.js `_zplLines`/`_elZpl`/`_borderZpl`/`_tableZpl` 의 문자열 조립을 바이트 단위로 재현한다.
+// (^A0N 의 두 번째 글자는 대문자 O 가 아니라 숫자 0 — ZPL 스케일러블 폰트 ^A0)
 //
-// ── 벤치마크(정합성 기준) ──────────────────────────────────────────────
-// seed.ts 의 SEED_ELEMENTS + SEED_SPEC(4×6 in @ 8dpmm) 로 buildZpl 을 돌리면
-// 아래 37줄이 그대로 나와야 한다(assets/screenshots/panel-zplcode.png).
-// (^A0N 의 두 번째 글자는 대문자 O 가 아니라 숫자 0 임에 주의 — ZPL 스케일러블 폰트 ^A0)
-//
-//  1  ^XA
-//  2  ^PW812
-//  3  ^LL1218
-//  4  ^CI28
-//  5  ^FO24,24^GB764,1170,3^FS
-//  6  ^FO52,50^A0N,56,56^FB596,1,0,C^FD부품 라벨 / PART LABEL^FS
-//  7  ^FO40,38^GB620,90,3^FS
-//  8  ^FO664,56^GFA,1300,1300,13,<1비트 비트맵 100×100 · 임계값 128>^FS
-//  9  ^FO52,176^GB712,5,5^FS
-// 10  ^FO54,206^GB712,368,3^FS
-// 11  ^FO264,206^GB3,92,3^FS
-// 12  ^FO264,298^GB3,92,3^FS
-// 13  ^FO264,390^GB3,92,3^FS
-// 14  ^FO264,482^GB3,92,3^FS
-// 15  ^FO564,206^GB3,92,3^FS
-// 16  ^FO564,298^GB3,92,3^FS
-// 17  ^FO564,390^GB3,92,3^FS
-// 18  ^FO564,482^GB3,92,3^FS
-// 19  ^FO54,298^GB210,3,3^FS
-// 20  ^FO264,298^GB300,3,3^FS
-// 21  ^FO54,390^GB210,3,3^FS
-// 22  ^FO264,390^GB300,3,3^FS
-// 23  ^FO54,482^GB210,3,3^FS
-// 24  ^FO264,482^GB300,3,3^FS
-// 25  ^FO68,237^A0N,30,30^FB182,1,0,L^FDPART NO^FS
-// 26  ^FO278,235^A0N,34,34^FB272,1,0,L^FDWB-4061-203^FS
-// 27  ^FO578,220^BQN,2,5,M^FDLA,WB-4061-203^FS
-// 28  ^FO68,329^A0N,30,30^FB182,1,0,L^FD품명 / NAME^FS
-// 29  ^FO278,327^A0N,34,34^FB272,1,0,L^FD브래킷 ASSY^FS
-// 30  ^FO68,421^A0N,30,30^FB182,1,0,L^FD수량 / QTY^FS
-// 31  ^FO278,419^A0N,34,34^FB272,1,0,L^FD50 EA^FS
-// 32  ^FO68,513^A0N,30,30^FB182,1,0,L^FDLOT^FS
-// 33  ^FO278,511^A0N,34,34^FB272,1,0,L^FDL-250722^FS
-// 34  ^FO52,600^A0N,28,28^FB596,1,0,L^FDSUPPLIER   워크벤치 정밀^FS
-// 35  ^FO52,648^BY3^BCN,170,Y,N,N^FD8829301047^FS
-// 36  ^FO52,858^A0N,26,26^FB596,1,0,L^FDTRACKING   8829301047^FS
-// 37  ^XZ
-// ─────────────────────────────────────────────────────────────────────
+// v2: 이미지 요소는 실제 ^GFA 헥스 데이터를 내보낸다(요소의 gfaHex — image-util.rasterize1bit 산출).
+// 여기서 나온 ZPL 은 Labelary/실프린터에서 캔버스와 동일하게 렌더되어야 하며(WYSIWYG),
+// 입력 문자셋 제약은 sanitize.ts 가 GUI 입력 단계에서 이미 보장한다.
 import { dpiFor, toDots, norm, tableW, tableH, mergedRect, isHidden } from './geometry'
 import type { Element, BorderableElement, TableElement, Rotation, ZplLine, ZplState } from './types'
 
@@ -91,14 +51,19 @@ export function elZpl(el: Element): string[] {
     }
     case 'qr': {
       const rot = rotCode(el.rot)
-      return [`^FO${el.x},${el.y}^BQ${rot},2,${el.mag || 5},${el.ecc || 'M'}^FDLA,${el.data}^FS`, ...borderZpl(el)]
+      // ECC 는 ^FD 접두(<ecc>A,)가 실효값 — Labelary/펌웨어는 ^BQ 4번째 파라미터를 무시한다(실측).
+      const ecc = el.ecc || 'M'
+      return [`^FO${el.x},${el.y}^BQ${rot},2,${el.mag || 5},${ecc}^FD${ecc}A,${el.data}^FS`, ...borderZpl(el)]
     }
     case 'image': {
-      const rowBytes = Math.ceil(el.w / 8)
-      const bytes = rowBytes * el.h
-      const note = el.dither ? ' · 디더링' : ' · 임계값 ' + el.threshold
+      // 래스터(gfaHex) 전이면 이미지 명령을 생략 — 가짜 데이터를 내보내지 않는다.
+      if (!el.gfaHex) return [...borderZpl(el)]
+      // 헤더는 hex 와 같은 래스터 시점의 치수에서 계산(재래스터 지연 중에도 정합 보장)
+      const rowBytes = el.gfaRowBytes ?? Math.ceil(el.w / 8)
+      const rows = el.gfaRows ?? el.h
+      const bytes = rowBytes * rows
       return [
-        `^FO${el.x},${el.y}^GFA,${bytes},${bytes},${rowBytes},<1비트 비트맵 ${el.w}×${el.h}${note}>^FS`,
+        `^FO${el.x},${el.y}^GFA,${bytes},${bytes},${rowBytes},${el.gfaHex}^FS`,
         ...borderZpl(el),
       ]
     }
@@ -185,11 +150,10 @@ export function tableZpl(t: TableElement): string[] {
               : ay + Math.round((rect.h - f) / 2)
         out.push(`^FO${ax + pad},${yy}^A0N,${f},${f}^FB${inner},1,0,${cell.halign || 'L'}^FD${cell.text || ''}^FS`)
       } else if (cell.type === 'qr') {
-        out.push(`^FO${ax + pad},${ay + pad}^BQN,2,${cell.mag || 4},M^FDLA,${cell.data || ''}^FS`)
+        // 셀 QR 은 ECC M 고정(캔버스 QrMatrixShape 와 동일) — FD 접두로 실효 ECC 를 지정
+        out.push(`^FO${ax + pad},${ay + pad}^BQN,2,${cell.mag || 4},M^FDMA,${cell.data || ''}^FS`)
       } else if (cell.type === 'barcode') {
         out.push(`^FO${ax + pad},${ay + pad}^BY2^BCN,${rect.h - pad * 2},N,N,N^FD${cell.data || ''}^FS`)
-      } else if (cell.type === 'image') {
-        out.push(`^FO${ax + pad},${ay + pad}^GFA,...,<1비트 셀 이미지>^FS`)
       }
     }
   }

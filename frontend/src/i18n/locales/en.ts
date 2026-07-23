@@ -50,10 +50,9 @@ export const en: ShellStrings = {
   // ── ZPL Editor ──
   // Toolbar
   z_insert: 'Insert',
-  z_edit: 'Edit',
-  z_preview: 'Preview',
   z_code: 'ZPL code',
   z_import: 'Import',
+  z_reset: 'Reset',
   z_undo: 'Undo (Ctrl+Z)',
   z_redo: 'Redo (Ctrl+Y)',
   z_copy_el: 'Copy element (Ctrl+C)',
@@ -120,6 +119,12 @@ export const en: ShellStrings = {
   z_bctype: 'Barcode type',
   z_hri: 'Human-readable (HRI)',
   z_bc_fit: 'Width = data + module (no horizontal resize)',
+  z_ascii_note: 'Printable ASCII (English) only — ZPL built-in fonts cannot print other scripts.',
+  z_bc_charset_code128: 'Printable ASCII only (Code 128).',
+  z_bc_charset_code39: 'Code 39 charset: 0–9 A–Z − . space $ / + % (auto-uppercased).',
+  z_bc_charset_ean13: 'EAN-13: 12 digits — the check digit is added automatically.',
+  z_bc_charset_upca: 'UPC-A: 11 digits — the check digit is added automatically.',
+  z_bc_approx: 'EAN/UPC canvas preview is approximate — printers use their own guard/HRI layout. Verify on the target printer.',
   // QR
   z_ecc: 'Error correction',
   // Image
@@ -132,7 +137,7 @@ export const en: ShellStrings = {
   z_bthick: 'Border thickness (dot)',
   z_bpad: 'Padding (dot)',
   z_synthetic: 'Not native ZPL · emitted as a synthetic command',
-  z_verify: 'Firmware-dependent — verify with Labelary render',
+  z_verify: 'Rotation support varies by printer firmware — verify on the target printer.',
   // Table
   z_whole_table: 'Select whole table',
   z_cell_type: 'Cell content type',
@@ -171,9 +176,11 @@ export const en: ShellStrings = {
   z_err_no_xa: 'Missing ^XA start command (line 1).',
   z_err_no_xz: 'Missing ^XZ end command. The label block is not closed.',
   z_err_xq: 'Unknown command ^XQ — line {{n}}. Not a supported directive.',
+  z_err_bad: 'Malformed ZPL near line {{n}}.',
+  z_err_unsupported: 'Unsupported command {{cmd}} — line {{n}}.',
   // Setup dialog
   z_setup: 'Label setup',
-  z_setup_body: 'Set the label size, unit, and print density. Applied to the ^PW · ^LL values and the preview instantly.',
+  z_setup_body: 'Set the label size, unit, and print density. Applied to the ^PW · ^LL values and the canvas instantly.',
   z_unit: 'Unit',
   z_unit_in: 'Inches (in)',
   z_unit_mm: 'Millimeters (mm)',
@@ -182,11 +189,6 @@ export const en: ShellStrings = {
   z_density: 'Print density',
   z_output: 'Output size',
   z_done: 'Done',
-  // Preview mode
-  z_preview_hint: 'Rendered label preview',
-  z_preview_loading: 'Rendering label…',
-  z_preview_error: 'Preview render failed',
-  z_preview_egress: 'Preview sends your label content to Labelary.com to render it.',
   // Status bar
   z_status_hint: 'Arrows 1 dot · Shift+arrows 10 dot',
   z_status_cell: 'Table cell · R{{r}} · C{{c}}',

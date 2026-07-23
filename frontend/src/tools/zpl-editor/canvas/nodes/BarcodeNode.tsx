@@ -1,8 +1,10 @@
 // 1D 바코드 노드 — barcode-encode 의 실제 바 지오메트리를 bcWidth×h 박스로 스케일해 그린다.
+// HRI 는 ZPL/Labelary 와 동일하게 바 **아래** 영역에 그린다(파생 높이는 geometry.hriHeight).
+// HRI 글리프 높이 ≈ 10×module 은 Labelary 실측 보정값.
 import { useMemo } from 'react'
 import { Group, Rect, Text } from 'react-konva'
-import { encodeBarcode } from '../../barcode-encode'
-import { norm } from '../../geometry'
+import { encodeBarcode, hriText } from '../../barcode-encode'
+import { bcWidth, hriFontSize } from '../../geometry'
 import { INK, PAPER, cssVar } from '../theme'
 import type { BarcodeElement, BarcodeType } from '../../types'
 
@@ -34,25 +36,22 @@ export function BarsShape({
   )
 }
 
-export function BarcodeNode({ el, zoom }: { el: BarcodeElement; zoom: number }) {
-  const W = norm(el).w
-  // HRI 는 v1 과 동일한 화면 크기(15dot 상당, 최소 7 화면픽셀)를 dot 공간으로 환산해 유지.
-  const hriFont = Math.max(7 / zoom, 15)
-  const hriH = el.hri ? hriFont * 1.2 + 2 : 0
-  const barsH = Math.max(1, el.h - hriH)
+export function BarcodeNode({ el }: { el: BarcodeElement }) {
+  const W = bcWidth(el)
+  const hriF = hriFontSize(el)
   return (
     <>
-      <Rect width={W} height={el.h} fill={PAPER} listening={false} />
-      <BarsShape bcType={el.bcType} data={el.data} w={W} h={barsH} />
+      <Rect width={W} height={el.h + (el.hri ? hriF : 0)} fill={PAPER} listening={false} />
+      <BarsShape bcType={el.bcType} data={el.data} w={W} h={el.h} />
       {el.hri && (
+        // 바 종료 직후부터 그린다 — 실측상 글리프 상단 여백(~2×module)이 바와의 간격을 만든다
         <Text
-          y={barsH + 2}
+          y={el.h}
           width={W}
-          text={el.data}
+          text={hriText(el.bcType, el.data)}
           align="center"
           fontFamily={cssVar('--wb-font-mono', 'monospace')}
-          fontSize={hriFont}
-          letterSpacing={2}
+          fontSize={hriF}
           fill={INK}
           listening={false}
         />
