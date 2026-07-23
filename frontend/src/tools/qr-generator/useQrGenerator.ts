@@ -13,16 +13,17 @@ export interface QrEntry {
 // ── 반응형 상한 산정 상수(README _measure) ──
 const CELL_W = 160 // 카드 최소 폭
 const CELL_H = 236 // 대략적 카드 높이(헤더 + QR + 라벨)
-const GAP = 16 // 격자 gap
+const GAP = 32 // 격자 gap(스캔 시 옆 QR 오인 방지용으로 넉넉히)
 const PAD_X = 68 // 격자 영역 좌우 padding 34*2
 const PAD_Y = 44 // 격자 영역 상하 padding 22*2
-const INITIAL_CAP = 12 // 측정 전 초기값
+const MAX_CAP = 10 // 절대 상한 — 간격 확보를 위해 측정값과 무관하게 10개로 제한
+const INITIAL_CAP = 10 // 측정 전 초기값
 
 export function useQrGenerator() {
   const [entries, setEntries] = useState<QrEntry[]>([])
   const [single, setSingle] = useState('')
   const [bulk, setBulk] = useState('')
-  const [trim, setTrim] = useState(false)
+  const [trim, setTrim] = useState(true)
   const [qrCap, setQrCap] = useState(INITIAL_CAP)
   const [lastOverflow, setLastOverflow] = useState(0)
 
@@ -149,7 +150,7 @@ export function useQrGenerator() {
     if (w <= 0 || h <= 0) return
     const cols = Math.max(1, Math.floor((w + GAP) / (CELL_W + GAP)))
     const rows = Math.max(1, Math.floor((h + GAP) / (CELL_H + GAP)))
-    const cap = Math.max(1, cols * rows)
+    const cap = Math.min(MAX_CAP, Math.max(1, cols * rows))
     setQrCap((prev) => (prev === cap ? prev : cap))
   }, [])
 

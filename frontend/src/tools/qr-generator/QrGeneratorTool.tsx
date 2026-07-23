@@ -17,6 +17,8 @@ import { useQrGenerator, type QrEntry } from './useQrGenerator'
 
 const MONO = 'var(--wb-font-mono)'
 const MUTED_55 = 'color-mix(in srgb, var(--wb-color-text) 55%, transparent)'
+// [추가]/[일괄 생성] 버튼 폭을 동일하게 고정 → 좌측 입력(input)/입력영역(textarea) 폭이 서로 일치.
+const BTN_W = 108
 
 export function QrGeneratorTool() {
   const { t } = useTranslation()
@@ -50,7 +52,7 @@ export function QrGeneratorTool() {
             onClick={qr.addSingle}
             disabled={qr.atCap}
             className="wb-btn wb-btn-secondary"
-            style={{ height: 40, gap: 6, whiteSpace: 'nowrap' }}
+            style={{ height: 40, width: BTN_W, justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}
           >
             <Icon icon={Plus} size={15} />
             {t('qr_add')}
@@ -72,7 +74,7 @@ export function QrGeneratorTool() {
             onClick={qr.addBulk}
             disabled={qr.atCap}
             className="wb-btn wb-btn-secondary"
-            style={{ height: 40, whiteSpace: 'nowrap' }}
+            style={{ height: 40, width: BTN_W, justifyContent: 'center', whiteSpace: 'nowrap' }}
           >
             {t('qr_bulk_add')}
           </button>
@@ -80,7 +82,7 @@ export function QrGeneratorTool() {
 
         {/* C. 옵션/상태 행 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          {/* trim 커스텀 체크박스(기본 OFF) */}
+          {/* trim 커스텀 체크박스(기본 ON) */}
           <div
             role="checkbox"
             aria-checked={qr.trim}
@@ -185,7 +187,7 @@ export function QrGeneratorTool() {
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-              gap: 16,
+              gap: 32,
               alignContent: 'start',
             }}
           >
