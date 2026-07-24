@@ -2,6 +2,7 @@
 // 수식·반올림까지 동일하게 재현한다. React/DOM 의존 없음.
 import qrcode from 'qrcode-generator'
 import { encodeBarcode } from './barcode-encode'
+import { FONT_A_ADVANCE, FONT_A_CELL_HEIGHT, fontAMag } from './canvas/font-a'
 import { DPI_BY_DPMM } from './types'
 import type {
   Element,
@@ -107,17 +108,27 @@ export function hriHeight(el: BarcodeElement): number {
 export function textW(el: TextElement): number {
   const font = el.font || 30
   const fontW = el.fontW || font
-  const avgEm = el.face === 'A' ? 0.6 : 0.52
-  const scaleX = el.face === 'A' ? fontW / font / 0.6 : fontW / font
   const longest = Math.max(1, ...String(el.text || '').split('\n').map((line) => Array.from(line).length))
+  if (el.face === 'A') return longest * FONT_A_ADVANCE * fontAMag(font, fontW).hz
+  const avgEm = 0.52
+  const scaleX = fontW / font
   return Math.max(1, Math.round(longest * font * avgEm * scaleX))
 }
 
-// 텍스트 파생 높이: 폰트 × 1.18 × min(maxLines, 실제줄수), 최소 1줄.
+// 줄 피치(Labelary 실측): 글꼴 A = 9×vMag + gap, 스케일러블 = h + gap (^FB gap 은 배율 무관 절대 dot).
+export function textLinePitch(el: TextElement): number {
+  const gap = el.lineGap ?? 0
+  return el.face === 'A' ? FONT_A_CELL_HEIGHT * fontAMag(el.font, el.fontW).v + gap : (el.font || 30) + gap
+}
+
+// 텍스트 파생 높이: ^FB 블록은 실제 내용과 무관하게 최대 줄 수 전체를 예약한다.
 export function textH(el: TextElement): number {
-  if (el.block === false) return Math.round((el.font || 30) * 1.18)
-  const lines = Math.min(el.maxLines || 8, String(el.text || '').split('\n').length)
-  return Math.round((el.font || 30) * 1.18 * Math.max(1, lines))
+  if (el.block === false) {
+    const lines = Math.max(1, String(el.text || '').split('\n').length)
+    return Math.round(textLinePitch(el) * lines)
+  }
+  const lines = Math.max(1, el.maxLines || 1)
+  return Math.round(textLinePitch(el) * lines)
 }
 
 // QR 파생 변 길이(정사각): 실제 모듈수 × 배율(기본 5).

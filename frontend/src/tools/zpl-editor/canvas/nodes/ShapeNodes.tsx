@@ -13,7 +13,9 @@ export function ShapeNode({ el, zoom }: { el: ShapeElement; zoom: number }) {
   switch (el.type) {
     case 'box': {
       const t = Math.min(Math.max(el.t, minT), el.w / 2, el.h / 2)
-      return <Rect x={t / 2} y={t / 2} width={el.w - t} height={el.h - t} stroke={INK} strokeWidth={t} globalCompositeOperation={composite} listening={false} />
+      // ^GB 라운딩(0~8): 외곽 반경 = round/8 × min(w,h)/2 (Labelary 실측) — 패스는 t/2 안쪽이므로 t/2 차감
+      const outerR = el.round ? (el.round / 8) * (Math.min(el.w, el.h) / 2) : 0
+      return <Rect x={t / 2} y={t / 2} width={el.w - t} height={el.h - t} cornerRadius={Math.max(0, outerR - t / 2)} stroke={INK} strokeWidth={t} globalCompositeOperation={composite} listening={false} />
     }
     case 'ellipse': {
       const t = Math.min(Math.max(el.t, minT), el.w / 2, el.h / 2)

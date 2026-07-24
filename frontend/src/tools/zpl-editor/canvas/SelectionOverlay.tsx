@@ -15,13 +15,15 @@ interface BBox {
   h: number
 }
 
-// 회전 bbox — 화면 좌표(y-down)에서 rot 도 시계방향, ^FO 원점(el.x, el.y) 피벗.
+// 회전 bbox — Labelary 실측 규칙: ^FO = 회전된 앵커 박스(바코드는 바 영역)의 좌상단.
+// 바코드의 HRI 는 앵커 박스 밖으로 돌므로(90°: FO 왼쪽) bbox 는 잉크 전체(norm)를 감싼다.
 function elBBox(el: Element): BBox {
   const { w, h } = norm(el)
-  const rot = 'rot' in el ? el.rot : 0
-  if (rot === 90) return { x: el.x - h, y: el.y, w: h, h: w }
-  if (rot === 180) return { x: el.x - w, y: el.y - h, w, h }
-  if (rot === 270) return { x: el.x, y: el.y - w, w: h, h: w }
+  const rot = 'rot' in el && el.type !== 'image' ? el.rot : 0
+  const anchorH = el.type === 'barcode' ? el.h : h
+  if (rot === 90) return { x: el.x + anchorH - h, y: el.y, w: h, h: w }
+  if (rot === 180) return { x: el.x, y: el.y + anchorH - h, w, h }
+  if (rot === 270) return { x: el.x, y: el.y, w: h, h: w }
   return { x: el.x, y: el.y, w, h }
 }
 
@@ -36,7 +38,9 @@ const H = (role: string, fx: number, fy: number, cursor: string): HandleDef => (
 // 타입별 핸들 세트(§5.2 — v1/핸드오프와 동일, 제약 패리티 우선).
 function handlesFor(el: Element): HandleDef[] {
   if (el.type === 'text')
-    return el.block === false ? [] : [H('wL', 0, 0.5, 'ew-resize'), H('wR', 1, 0.5, 'ew-resize')]
+    return el.block === false
+      ? []
+      : [H('wL', 0, 0.5, 'ew-resize'), H('wR', 1, 0.5, 'ew-resize'), H('hB', 0.5, 1, 'ns-resize')]
   if (el.type === 'barcode') return [H('hT', 0.5, 0, 'ns-resize'), H('hB', 0.5, 1, 'ns-resize')]
   if (el.type === 'qr' || el.type === 'circle' || (el.type === 'image' && !el.free))
     return [H('nw', 0, 0, 'nwse-resize'), H('ne', 1, 0, 'nesw-resize'), H('se', 1, 1, 'nwse-resize'), H('sw', 0, 1, 'nesw-resize')]

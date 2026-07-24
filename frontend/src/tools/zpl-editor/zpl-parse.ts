@@ -86,8 +86,9 @@ export function parseZpl(txt: string): ParseResult {
   let pw: number | null = null
   let ll: number | null = null
   let module = 3 // ^BY 지속 상태
+  let ratio = 3 // ^BY wide:narrow 비율 지속 상태(Code39 폭에 실효 — 3 외 값은 미지원 오류)
   let byHeight = 100 // ^BY 기본 바 높이 지속 상태
-  let cf: { face: FontFace; h: number; w: number } | null = null
+  let cf: { face: FontFace; h: number; w: number } = { face: 'A', h: 9, w: 5 }
 
   // 열린 필드(^FO … ^FS) 상태
   interface Field {
@@ -95,7 +96,7 @@ export function parseZpl(txt: string): ParseResult {
     y: number
     line: number
     font?: { face: FontFace; rot: Rotation; h: number; w: number }
-    fb?: { w: number; lines: number; align: Align }
+    fb?: { w: number; lines: number; align: Align; gap: number }
     fd?: string
     bc?: { kind: BarcodeType; rot: Rotation; h: number; hri: boolean }
     qr?: { rot: Rotation; mag: number; ecc: Ecc }
@@ -104,6 +105,7 @@ export function parseZpl(txt: string): ParseResult {
     fx?: boolean
     reverse?: boolean
     module: number
+    ratio: number
     byHeight: number
   }
   let f: Field | null = null
@@ -147,6 +149,9 @@ export function parseZpl(txt: string): ParseResult {
       return null
     }
     if (fld.bc) {
+      // Code39 는 ^BY 비율이 폭을 바꾼다(실측: 폭=(3r+6)m×자수+간격) — 인코더는 3 고정이라 그 외는 오류
+      if (fld.bc.kind === 'code39' && Math.abs(fld.ratio - 3) > 0.05)
+        return { ok: false, code: 'unsupported', line, cmd: '^BY ratio ' + fld.ratio }
       const data = sanitizeBarcodeData(fld.bc.kind, fld.fd ?? '')
       els.push({
         type: 'barcode',
@@ -165,28 +170,35 @@ export function parseZpl(txt: string): ParseResult {
     }
     if (fld.shape) {
       const p = fld.shape.p
+      // 색상 파라미터 W(흰색 잉크)는 캔버스가 재현하지 않으므로 미지원 오류(조용한 무시 금지)
+      const colorIdx = fld.shape.kind === 'GC' ? 2 : 3
+      if ((p[colorIdx] || 'B').trim().toUpperCase() === 'W')
+        return { ok: false, code: 'unsupported', line, cmd: '^' + fld.shape.kind + ' color W' }
       if (fld.shape.kind === 'GB') {
         const w = intAt(p, 0, 1)
         const h = intAt(p, 1, 1)
         const t = intAt(p, 2, 1)
-        // 생성 규칙 역추론: 두께와 같은 변은 선(line)으로 복원
-        if (h <= t && w > t) els.push({ type: 'line', x, y, dir: 'h', len: w, t, reverse: fld.reverse })
-        else if (w <= t && h > t) els.push({ type: 'line', x, y, dir: 'v', len: h, t, reverse: fld.reverse })
-        else els.push({ type: 'box', x, y, w, h, t, reverse: fld.reverse })
+        const round = Math.max(0, Math.min(8, intAt(p, 4, 0)))
+        // 생성 규칙 역추론: 두께와 같은 변은 선(line)으로 복원(라운딩이 있으면 박스 유지)
+        if (round === 0 && h <= t && w > t) els.push({ type: 'line', x, y, dir: 'h', len: w, t, reverse: fld.reverse })
+        else if (round === 0 && w <= t && h > t) els.push({ type: 'line', x, y, dir: 'v', len: h, t, reverse: fld.reverse })
+        else els.push({ type: 'box', x, y, w, h, t, ...(round > 0 ? { round } : {}), reverse: fld.reverse })
       } else if (fld.shape.kind === 'GE') {
         els.push({ type: 'ellipse', x, y, w: intAt(p, 0, 1), h: intAt(p, 1, 1), t: intAt(p, 2, 1), reverse: fld.reverse })
       } else if (fld.shape.kind === 'GC') {
         els.push({ type: 'circle', x, y, d: intAt(p, 0, 30), t: intAt(p, 1, 1), reverse: fld.reverse })
       } else {
-        const dir = (p[3] || 'L').trim() === 'R' ? 'R' : 'L'
+        // ^GD 방향은 5번째 파라미터(4번째는 색상), ZPL 기본값 R("/") — 실측 확인
+        const dir = (p[4] || 'R').trim().toUpperCase() === 'L' ? 'L' : 'R'
         els.push({ type: 'diagonal', x, y, w: intAt(p, 0, 1), h: intAt(p, 1, 1), t: intAt(p, 2, 1), dir, reverse: fld.reverse })
       }
       return null
     }
     if (fld.font != null || fld.fd != null) {
       if (fld.fd == null) return { ok: false, code: 'bad', line }
-      const font = fld.font ?? (cf ? { face: cf.face, rot: 0 as Rotation, h: cf.h, w: cf.w } : { face: '0' as FontFace, rot: 0 as Rotation, h: 30, w: 30 })
-      const text = sanitizeZplText(fld.fd.split('\\&').join('\n'))
+      const font = fld.font ?? { face: cf.face, rot: 0 as Rotation, h: cf.h, w: cf.w }
+      // \& 개행은 ^FB 안에서만 유효(실측) — 비-FB 필드의 \& 는 문자 그대로 인쇄되므로 변환하지 않는다
+      const text = sanitizeZplText(fld.fb ? fld.fd.split('\\&').join('\n') : fld.fd)
       els.push({
         type: 'text',
         x,
@@ -201,6 +213,7 @@ export function parseZpl(txt: string): ParseResult {
         border: noBorder(),
         block: fld.fb != null,
         face: font.face,
+        ...(fld.fb && fld.fb.gap !== 0 ? { lineGap: fld.fb.gap } : {}),
         reverse: fld.reverse,
       })
       return null
@@ -229,16 +242,18 @@ export function parseZpl(txt: string): ParseResult {
       else if (c.code === 'LL') ll = intAt(p, 0, 0) || ll
       else if (c.code === 'CI') continue
       else if (c.code === 'CF') {
-        const face = fontFace(p[0] || cf?.face || '0')
-        const h = intAt(p, 1, cf?.h ?? 30)
+        const face = fontFace(p[0] || cf.face)
+        const h = intAt(p, 1, cf.h)
         cf = { face, h, w: intAt(p, 2, defaultFontWidth(face, h)) }
       }
       else if (c.code === 'BY') {
         module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
+        const r = parseFloat(p[1])
+        if (Number.isFinite(r)) ratio = r
         byHeight = Math.max(1, intAt(p, 2, byHeight))
       }
       else if (c.code === 'FX') continue
-      else if (c.code === 'FO') f = { x: intAt(p, 0, 0), y: intAt(p, 1, 0), line: c.line, module, byHeight }
+      else if (c.code === 'FO') f = { x: intAt(p, 0, 0), y: intAt(p, 1, 0), line: c.line, module, ratio, byHeight }
       else if (c.code === 'FS') continue
       else return { ok: false, code: 'unsupported', line: c.line, cmd: '^' + c.code }
       continue
@@ -253,14 +268,17 @@ export function parseZpl(txt: string): ParseResult {
       // 닫히지 않은 필드에서 새 ^FO — 형식 오류
       return { ok: false, code: 'bad', line: c.line }
     } else if (c.code[0] === 'A' && c.code.length === 2) {
-      // params: "N,56,56" (회전문자, 높이, 폭)
+      // params: "N,56,56" (회전문자, 높이, 폭) — 크기 생략 시 직전 ^CF 크기를 상속(Labelary 실측)
       const face = fontFace(c.code[1])
       const rot = rotOf(p[0] || 'N')
-      const h = intAt(p, 1, 30)
-      f.font = { face, rot, h, w: intAt(p, 2, defaultFontWidth(face, h)) }
+      const hasH = Number.isFinite(parseInt(p[1], 10))
+      const h = intAt(p, 1, cf.h)
+      f.font = { face, rot, h, w: intAt(p, 2, !hasH && face === cf.face ? cf.w : defaultFontWidth(face, h)) }
     } else if (c.code === 'FB') {
+      // p: 폭, 줄수, 줄 추가간격(gap), 정렬, 행잉 인덴트(미지원 — 0 외 값은 오류)
+      if (intAt(p, 4, 0) !== 0) return { ok: false, code: 'unsupported', line: c.line, cmd: '^FB indent' }
       const al = (p[3] || 'L').toUpperCase()
-      f.fb = { w: intAt(p, 0, 360), lines: intAt(p, 1, 1), align: (['L', 'C', 'R', 'J'].includes(al) ? al : 'L') as Align }
+      f.fb = { w: intAt(p, 0, 360), lines: intAt(p, 1, 1), gap: intAt(p, 2, 0), align: (['L', 'C', 'R', 'J'].includes(al) ? al : 'L') as Align }
     } else if (c.code === 'FD') {
       f.fd = c.params
     } else if (c.code === 'FX') {
@@ -269,6 +287,11 @@ export function parseZpl(txt: string): ParseResult {
       f.reverse = true
     } else if (c.code === 'BY') {
       f.module = Math.max(1, Math.min(10, intAt(p, 0, 3)))
+      const r = parseFloat(p[1])
+      if (Number.isFinite(r)) {
+        f.ratio = r
+        ratio = r
+      }
       f.byHeight = Math.max(1, intAt(p, 2, f.byHeight))
       module = f.module
       byHeight = f.byHeight

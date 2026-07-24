@@ -11,17 +11,23 @@ import type { FontFace } from '../types'
 export const LABEL_FONT = "'Roboto Condensed', 'Noto Sans KR', sans-serif"
 const LABEL_FONT_A = "monospace"
 
-// ^FB 줄간격(§6.4) — 핸드오프 기준 1.18 에서 시작(Labelary 대조 튜닝 지점).
-export const LABEL_LINE_HEIGHT = 1.18
+// ^FB 줄 피치(Labelary 실측) = 글꼴높이 + gap(^FB 3번째 파라미터) — 1.18 배수 아님.
+// Konva lineHeight 배수는 요소별로 (font + lineGap) / font 로 계산한다(TextNode).
+export function labelLineHeight(fontSize: number, lineGap: number): number {
+  return fontSize > 0 ? (fontSize + lineGap) / fontSize : 1
+}
 
 // Konva 는 폰트 지연 로드 시 자동 재그리기를 하지 않는다(§6.1) —
 // 첫 Stage draw 전에 로드를 await 하고, 완료 시점에 레이어를 다시 그려야 한다.
 let ready = false
 let pending: Promise<void> | null = null
 
-// middle 베이스라인 앵커 → alphabetic 베이스라인 거리(em 비율). 런타임 실측(브라우저/폰트 무관 보정).
-const middleToBaseline: Partial<Record<FontFace, number>> = { '0': 0.32, A: 0.32 }
-const capToBaseline: Partial<Record<FontFace, number>> = { '0': 0.75, A: 7 / 9 }
+// Konva 10+(legacyTextRendering=false)는 textBaseline='alphabetic'으로, 줄 앵커(lineHeight/2)에서
+// measureSize('M')의 (fontBoundingBoxAscent-Descent)/2 만큼 내린 곳에 베이스라인을 놓는다 —
+// 그 앵커→베이스라인 거리(em 비율)를 같은 API로 실측해 보관한다(브라우저/폰트 무관 보정).
+const anchorToBaseline: Partial<Record<FontFace, number>> = { '0': 0.34, A: 0.34 }
+// 캔버스 폰트의 캡 높이(em 비율) — 베이스라인을 y+cap×h 에 두면 캡 상단이 정확히 FO y 에 온다.
+const capToBaseline: Partial<Record<FontFace, number>> = { '0': 0.71, A: 7 / 9 }
 
 export function labelFontFamily(face?: FontFace): string {
   return face === 'A' ? LABEL_FONT_A : LABEL_FONT
@@ -38,10 +44,10 @@ export function labelFontsReady(): boolean {
   return ready
 }
 
-// Konva Text(내부 textBaseline='middle', 줄 앵커 = lineHeight/2)가 그린 글리프의 베이스라인을
-// ZPL ^A0 와 같은 위치(y + 0.75×h — CG Triumvirate 캡 높이, Labelary 실측)로 옮기는 offsetY.
+// Konva Text 가 그린 글리프의 베이스라인을 캡 상단 = FO y(ZPL ^A0 의 Labelary 실측 배치)가
+// 되도록 옮기는 offsetY. Konva 배치식(lineHeight/2 + 앵커거리)을 빼고 cap×h 를 더한 값.
 export function labelTextOffsetY(fontSize: number, lineHeight: number, face: FontFace = '0'): number {
-  return (lineHeight / 2 + (middleToBaseline[face] ?? middleToBaseline['0'] ?? 0.32) - (capToBaseline[face] ?? capToBaseline['0'] ?? 0.75)) * fontSize
+  return (lineHeight / 2 + (anchorToBaseline[face] ?? anchorToBaseline['0'] ?? 0.34) - (capToBaseline[face] ?? capToBaseline['0'] ?? 0.71)) * fontSize
 }
 
 export function loadLabelFonts(): Promise<void> {
@@ -57,15 +63,15 @@ export function loadLabelFonts(): Promise<void> {
       const c = document.createElement('canvas')
       const x = c.getContext('2d')
       if (x) {
-        for (const face of ['0', 'A'] as const) {
-          x.font = face === 'A' ? '100px monospace' : "700 100px 'Roboto Condensed', sans-serif"
+        for (const face of ['0'] as const) {
+          x.font = "700 100px 'Roboto Condensed', sans-serif"
           x.textBaseline = 'alphabetic'
-          const a = x.measureText('H').actualBoundingBoxAscent
-          x.textBaseline = 'middle'
-          const m = x.measureText('H').actualBoundingBoxAscent
-          const middle = (a - m) / 100
-          const cap = a / 100
-          if (Number.isFinite(middle) && middle > 0 && middle < 0.6) middleToBaseline[face] = middle
+          const cap = x.measureText('H').actualBoundingBoxAscent / 100
+          // Konva measureSize('M')와 동일한 메트릭(fontBoundingBox, 없으면 actual 폴백)으로 앵커 거리 실측
+          const m = x.measureText('M')
+          const anchor = ((m.fontBoundingBoxAscent ?? m.actualBoundingBoxAscent)
+            - (m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent)) / 200
+          if (Number.isFinite(anchor) && anchor > 0.1 && anchor < 0.6) anchorToBaseline[face] = anchor
           if (Number.isFinite(cap) && cap > 0.5 && cap < 1) capToBaseline[face] = cap
         }
       }

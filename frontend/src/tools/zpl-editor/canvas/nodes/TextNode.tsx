@@ -1,27 +1,69 @@
-// 텍스트 노드 — ^A0{rot},{h},{w} + ^FB 의미를 Konva Text 로 재현(§6.2/§6.4).
-// fontSize = font(dot), 장평은 scaleX = fontW/font. ^FB 블록 폭은 장평과 무관하게 el.w 이므로
-// 레이아웃 폭을 scaleX 로 나눠 보정한다. 높이는 textH(el) 로 클립(v1 overflow hidden 과 동일).
-// offsetY: Konva 의 middle 앵커 기반 배치를 ZPL 베이스라인(y+0.75h)에 정렬(fonts.labelTextOffsetY).
-import { Group, Text } from 'react-konva'
+// 텍스트 노드 — 글꼴 A는 내장 알파 아틀라스를, 나머지는 Konva Text 근사를 사용한다.
+import { useMemo } from 'react'
+import { Group, Image as KonvaImage, Text } from 'react-konva'
 import { norm } from '../../geometry'
+import { fontAAlphaGrid, fontAMag } from '../font-a'
 import { INK } from '../theme'
-import { LABEL_LINE_HEIGHT, labelFontFamily, labelFontScaleX, labelTextOffsetY } from '../fonts'
+import { labelFontFamily, labelFontScaleX, labelLineHeight, labelTextOffsetY } from '../fonts'
 import type { TextElement } from '../../types'
 
 export function TextNode({ el }: { el: TextElement }) {
   const { w, h } = norm(el)
+  const mag = fontAMag(el.font, el.fontW)
+  const alphaGrid = useMemo(
+    () => fontAAlphaGrid(
+      el.text,
+      mag.v,
+      mag.hz,
+      el.block === false ? undefined : { w: el.w, align: el.align, maxLines: el.maxLines, gap: el.lineGap },
+    ),
+    [el.align, el.block, el.lineGap, el.maxLines, el.text, el.w, mag.hz, mag.v],
+  )
+  const alphaImage = useMemo(() => {
+    if (el.face !== 'A' || alphaGrid.w === 0 || alphaGrid.h === 0) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = alphaGrid.w
+    canvas.height = alphaGrid.h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    const image = ctx.createImageData(alphaGrid.w, alphaGrid.h)
+    const rgb = parseInt(INK.slice(1).split('').map((digit) => digit + digit).join(''), 16)
+    for (let i = 0; i < alphaGrid.alpha.length; i++) {
+      image.data[i * 4] = rgb >> 16
+      image.data[i * 4 + 1] = (rgb >> 8) & 0xff
+      image.data[i * 4 + 2] = rgb & 0xff
+      image.data[i * 4 + 3] = alphaGrid.alpha[i]
+    }
+    ctx.putImageData(image, 0, 0)
+    return canvas
+  }, [alphaGrid, el.face])
+  if (el.face === 'A') {
+    if (!alphaImage) return null
+    return <KonvaImage
+      x={alphaGrid.x0}
+      y={alphaGrid.y0}
+      image={alphaImage}
+      imageSmoothingEnabled={false}
+      globalCompositeOperation={el.reverse ? 'xor' : 'source-over'}
+      listening={false}
+    />
+  }
   const sx = labelFontScaleX(el.face, el.font, el.fontW)
   const align = el.align === 'C' ? 'center' : el.align === 'R' ? 'right' : el.align === 'J' ? 'justify' : 'left'
+  const lh = labelLineHeight(el.font, el.lineGap ?? 0)
+  // Labelary ^FB 중앙정렬은 트레일링 스페이스 1개를 포함해 센터링 → 정확 중앙보다 0.1625×h 왼쪽(실측)
+  const phantomC = el.block !== false && el.align === 'C' ? 0.1625 * el.font : 0
   const text = (
     <Text
       text={el.text}
       width={el.block === false ? undefined : sx > 0 ? w / sx : w}
       scaleX={sx}
-      offsetY={labelTextOffsetY(el.font, LABEL_LINE_HEIGHT, el.face)}
+      offsetX={phantomC}
+      offsetY={labelTextOffsetY(el.font, lh, el.face)}
       fontFamily={labelFontFamily(el.face)}
-      fontStyle={el.face === 'A' ? 'normal' : 'bold'}
+      fontStyle="bold"
       fontSize={el.font}
-      lineHeight={LABEL_LINE_HEIGHT}
+      lineHeight={lh}
       align={align}
       wrap={el.block === false ? 'none' : 'word'}
       fill={INK}

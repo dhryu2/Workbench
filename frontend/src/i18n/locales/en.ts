@@ -59,6 +59,7 @@ export const en: ShellStrings = {
   z_paste: 'Paste (Ctrl+V)',
   z_zoom_out: 'Zoom out',
   z_zoom_in: 'Zoom in',
+  z_zoom_reset: 'Reset zoom to 100%',
   z_close: 'Close',
   // Insert button labels
   z_text: 'Text',
@@ -102,7 +103,8 @@ export const en: ShellStrings = {
   z_fld_thick: 'Thickness (dot)',
   z_fld_data: 'Data',
   z_maxlines: 'Max lines',
-  z_text_block: 'Field block (^FB)',
+  z_text_block: 'Fixed text area (^FB)',
+  z_text_block_hint: 'Fixed-width text wraps automatically and is cut off at Max lines. No “…” is added; add it in the host program.',
   z_diameter: 'Diameter (dot)',
   z_module: 'Module width (^BY)',
   z_mag_step: 'Magnification (1–10)',

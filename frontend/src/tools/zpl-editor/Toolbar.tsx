@@ -24,6 +24,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Icon } from '../../lib/icons'
 import type { LucideIcon } from 'lucide-react'
+import { ZOOM_FIT_BASE, ZOOM_STEP } from './types'
 import type { Element } from './types'
 import type { ZplEditorApi } from './useZplEditor'
 
@@ -142,11 +143,19 @@ export function Toolbar({ api }: { api: ZplEditorApi }) {
 
       {/* 줌 컨트롤 */}
       <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wb-color-divider)' }}>
-        <button type="button" onClick={() => api.zoomBy(-0.06)} aria-label={t('z_zoom_out')} className="wb-zpl-iconbtn" style={{ width: 32, height: 30, display: 'grid', placeItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--wb-color-text)' }}>
+        <button type="button" onClick={() => api.zoomBy(-ZOOM_STEP)} aria-label={t('z_zoom_out')} className="wb-zpl-iconbtn" style={{ width: 32, height: 30, display: 'grid', placeItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--wb-color-text)' }}>
           <Icon icon={Minus} size={15} />
         </button>
-        <span style={{ minWidth: 48, textAlign: 'center', fontFamily: HEADING, fontWeight: 600, fontSize: 13 }}>{Math.round(z.zoom * 100)}%</span>
-        <button type="button" onClick={() => api.zoomBy(0.06)} aria-label={t('z_zoom_in')} className="wb-zpl-iconbtn" style={{ width: 32, height: 30, display: 'grid', placeItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--wb-color-text)' }}>
+        <button
+          type="button"
+          onClick={api.zoomReset}
+          title={t('z_zoom_reset')}
+          aria-label={t('z_zoom_reset')}
+          style={{ minWidth: 48, textAlign: 'center', fontFamily: HEADING, fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--wb-color-text)' }}
+        >
+          {Math.round(z.zoom / ZOOM_FIT_BASE * 100)}%
+        </button>
+        <button type="button" onClick={() => api.zoomBy(ZOOM_STEP)} aria-label={t('z_zoom_in')} className="wb-zpl-iconbtn" style={{ width: 32, height: 30, display: 'grid', placeItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--wb-color-text)' }}>
           <Icon icon={Plus} size={15} />
         </button>
       </div>

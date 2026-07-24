@@ -119,6 +119,7 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
         : [
             <NumberField key="w" label={t('z_fld_w')} value={S(e.w)} onChange={set('w', true)} />,
             <NumberField key="maxLines" label={t('z_maxlines')} value={S(e.maxLines)} onChange={set('maxLines', true)} />,
+            <Note key="blockHint">{t('z_text_block_hint')}</Note>,
           ]),
       <NumberField key="x" label={t('z_fld_x')} value={S(e.x)} onChange={set('x', true)} />,
       <NumberField key="y" label={t('z_fld_y')} value={S(e.y)} onChange={set('y', true)} />,
@@ -182,7 +183,8 @@ function ElementPanel({ api }: { api: ZplEditorApi }) {
     )
   }
 
-  const rotatable = selEl.type === 'text' || selEl.type === 'barcode' || selEl.type === 'qr' || selEl.type === 'image'
+  // 이미지는 제외 — ^GFA 는 ZPL 회전이 없어 인쇄물이 회전하지 않는다(WYSIWYG)
+  const rotatable = selEl.type === 'text' || selEl.type === 'barcode' || selEl.type === 'qr'
   const verify = selEl.type === 'qr' || selEl.type === 'image'
   const rot = 'rot' in selEl ? selEl.rot : 0
 

@@ -51,7 +51,13 @@ function SyntheticBorder({ el }: { el: BorderableElement }) {
 function ElementNode({ el, api, zoom, imageLabel }: { el: Element; api: ZplEditorApi; zoom: number; imageLabel: string }) {
   if (el.type === 'table') return <TableNode t={el} api={api} zoom={zoom} />
   const n = norm(el)
-  const rot = 'rot' in el ? el.rot : 0
+  // ^GFA 는 ZPL 에서 회전 불가 — 이미지의 회전은 무시해 인쇄물과 일치시킨다
+  const rot = 'rot' in el && el.type !== 'image' ? el.rot : 0
+  // Labelary 실측: ^FO = "회전된 결과 박스"의 좌상단 — 원점 피벗 회전 뒤 평행이동으로 재현.
+  // 앵커 박스: 바코드는 바 영역만(HRI 는 밖으로 돎), 그 외는 잉크 박스 전체(norm).
+  const anchorH = el.type === 'barcode' ? el.h : n.h
+  const rx = rot === 90 ? anchorH : rot === 180 ? n.w : 0
+  const ry = rot === 180 ? anchorH : rot === 270 ? n.w : 0
   let visual: ReactNode
   switch (el.type) {
     case 'text':
@@ -84,7 +90,7 @@ function ElementNode({ el, api, zoom, imageLabel }: { el: Element; api: ZplEdito
         setCursor(e, '')
       }}
     >
-      <Group rotation={rot}>
+      <Group rotation={rot} x={rx} y={ry}>
         <Rect width={n.w} height={n.h} fill="transparent" />
         {visual}
       </Group>

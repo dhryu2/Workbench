@@ -57,6 +57,7 @@ export const ko = {
   z_paste: '붙여넣기 (Ctrl+V)',
   z_zoom_out: '축소',
   z_zoom_in: '확대',
+  z_zoom_reset: '줌 100%로 초기화',
   z_close: '닫기',
   // 삽입 버튼 라벨
   z_text: '텍스트',
@@ -100,7 +101,8 @@ export const ko = {
   z_fld_thick: '두께 (dot)',
   z_fld_data: '데이터',
   z_maxlines: '최대 줄 수',
-  z_text_block: '필드 블록 (^FB)',
+  z_text_block: '고정 텍스트 영역 (^FB)',
+  z_text_block_hint: '고정 너비에서 텍스트가 자동 줄바꿈되며 최대 줄 수를 넘으면 잘립니다. “…”은 추가되지 않으므로 호스트 프로그램에서 넣어야 합니다.',
   z_diameter: '지름 (dot)',
   z_module: '모듈 폭 (^BY)',
   z_mag_step: '배율 (1–10)',

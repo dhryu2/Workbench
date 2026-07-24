@@ -93,6 +93,8 @@ export interface TextElement extends BaseElement {
   border: Border
   block?: boolean
   face?: FontFace
+  // ^FB 3번째 파라미터(줄 추가 간격, dot — 음수 허용). 줄 피치 = 글꼴높이 + lineGap(Labelary 실측).
+  lineGap?: number
 }
 
 export interface BarcodeElement extends BaseElement {
@@ -141,6 +143,8 @@ export interface BoxElement extends BaseElement {
   w: number
   h: number
   t: number
+  // ^GB 5번째 파라미터(코너 라운딩 0~8) — 외곽 반경 = round/8 × min(w,h)/2 (Labelary 실측)
+  round?: number
 }
 
 export interface EllipseElement extends BaseElement {
@@ -257,9 +261,10 @@ export type ZplLine = {
 // ── 상수(README 좌표계·단위) ──
 export const DPI_BY_DPMM: Record<Dpmm, number> = { 6: 152, 8: 203, 12: 300, 24: 600 }
 
-export const ZOOM_MIN = 0.26
-export const ZOOM_MAX = 0.72
-export const ZOOM_STEP = 0.06
-export const ZOOM_DEFAULT = 0.42
+export const ZOOM_FIT_BASE = 0.42
+export const ZOOM_MIN = ZOOM_FIT_BASE * 0.25
+export const ZOOM_MAX = ZOOM_FIT_BASE * 4
+export const ZOOM_STEP = ZOOM_FIT_BASE * 0.25
+export const ZOOM_DEFAULT = ZOOM_FIT_BASE
 
 export const HISTORY_MAX = 60

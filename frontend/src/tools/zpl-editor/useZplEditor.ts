@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { TFunction } from 'i18next'
-import { HISTORY_MAX, ZOOM_MAX, ZOOM_MIN } from './types'
+import { HISTORY_MAX, ZOOM_FIT_BASE, ZOOM_MAX, ZOOM_MIN } from './types'
 import type { BarcodeType, Dpmm, Element, Merge, TableCell, TableElement, Unit, ZplState } from './types'
-import { dpiFor, mergeAt, norm, toDots } from './geometry'
+import { dpiFor, mergeAt, norm, textLinePitch, toDots } from './geometry'
 import { buildZpl } from './zpl-generate'
 import { parseZpl } from './zpl-parse'
 import { gfaHexToDataUrl, makeEmblem, rasterize1bit } from './image-util'
@@ -27,6 +27,23 @@ type Patch = Record<string, unknown>
 function patchEl(el: Element, patch: Patch): Element {
   // 모든 편집은 새 객체를 만들어 넣으므로(불변) 히스토리 스냅샷과 공유 참조가 오염되지 않는다.
   return { ...el, ...patch } as Element
+}
+
+// 현재 상태의 라벨 영역 크기(dot). ^PW/^LL 파생값(렌더의 PW/LL)과 동일 계산 — 드래그 콜백은
+// zRef 스냅샷만 보므로 여기서 즉석 계산해 경계 클램프에 쓴다.
+function labelDots(s: ZplState): { pw: number; ll: number } {
+  const dpi = dpiFor(s.dpmm)
+  return { pw: toDots(parseFloat(s.w) || 0, s.unit, dpi), ll: toDots(parseFloat(s.h) || 0, s.unit, dpi) }
+}
+
+// 요소 좌상단(x,y)을 라벨 영역 안으로 하드 클램프. 하한은 0(좌·상단), 상한은 파생 bbox(norm)만큼
+// 뺀 값(우·하단). 요소가 라벨보다 크면 상한이 음수가 되므로 Math.max(0, …)로 원점에 고정한다.
+function clampToLabel(el: Element, x: number, y: number, pw: number, ll: number): { x: number; y: number } {
+  const { w, h } = norm(el)
+  return {
+    x: Math.max(0, Math.min(x, Math.max(0, pw - w))),
+    y: Math.max(0, Math.min(y, Math.max(0, ll - h))),
+  }
 }
 
 async function writeClipboardText(text: string): Promise<boolean> {
@@ -81,15 +98,33 @@ function cloneEls(els: Element[]): Element[] {
 }
 
 // ── 타입별 리사이즈 규칙(support.js `_applyResize`) ── role 별로 저장 필드 패치를 반환.
-function applyResize(el: Element, role: string, dx: number, dy: number): Patch {
+function applyResize(el: Element, role: string, dx: number, dy: number, pw = 0, ll = 0): Patch {
   const clampMin = (v: number, m: number) => Math.max(m, Math.round(v))
   const has = (ch: string) => role.indexOf(ch) >= 0
   if (el.type === 'text') {
     if (role === 'wL') {
-      const w = clampMin(el.w - dx, 40)
-      return { x: el.x + (el.w - w), w }
+      let w = clampMin(el.w - dx, 40)
+      let x = el.x + (el.w - w)
+      if (x < 0) {
+        w += x
+        x = 0
+      }
+      return { x, w }
     }
-    return { w: clampMin(el.w + dx, 40) }
+    if (role === 'wR') {
+      let w = clampMin(el.w + dx, 40)
+      if (pw > 0) w = Math.max(40, Math.min(w, pw - el.x))
+      return { w }
+    }
+    if (role === 'hB') {
+      // 하단 핸들: 드래그 높이를 줄 수로 스냅해 maxLines 만 갱신(원점 y 고정, 아래로 성장)
+      const lineH = textLinePitch(el)
+      const curH = norm(el).h
+      let maxLines = Math.max(1, Math.round((curH + dy) / lineH))
+      if (ll > 0) maxLines = Math.min(maxLines, Math.max(1, Math.floor((ll - el.y) / lineH)))
+      return { maxLines }
+    }
+    return {}
   }
   if (el.type === 'barcode') {
     // 폭은 데이터+모듈로 자동 — 높이만 조절
@@ -154,8 +189,20 @@ function applyResize(el: Element, role: string, dx: number, dy: number): Patch {
   if (has('n')) h = el.h - dy
   w = clampMin(w, 24)
   h = clampMin(h, 24)
+  // 동/남 핸들은 원점 고정 → bbox 우·하단이 라벨을 넘지 않게 폭/높이 상한을 건다.
+  if (has('e') && pw > 0) w = Math.max(24, Math.min(w, pw - el.x))
+  if (has('s') && ll > 0) h = Math.max(24, Math.min(h, ll - el.y))
   if (has('w')) x = el.x + (el.w - w)
   if (has('n')) y = el.y + (el.h - h)
+  // 서/북 핸들이 원점(0)을 넘어가면 경계에 고정하고 초과분만큼 크기를 줄인다.
+  if (has('w') && x < 0) {
+    w += x
+    x = 0
+  }
+  if (has('n') && y < 0) {
+    h += y
+    y = 0
+  }
   return { x, y, w, h }
 }
 
@@ -212,7 +259,7 @@ function makeInitialState(): ZplState {
     tableCols: '3',
     dragId: null,
     drag: null,
-    zoom: 0.42,
+    zoom: ZOOM_FIT_BASE,
     next: 100,
     copied: false,
     unit: DEFAULT_SPEC.unit,
@@ -289,8 +336,9 @@ export function useZplEditor(t: TFunction) {
 
   const toggleCode = useCallback(() => setZ((s) => ({ ...s, codeOpen: !s.codeOpen })), [])
   const zoomBy = useCallback((d: number) => {
-    setZ((s) => ({ ...s, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +(s.zoom + d).toFixed(2))) }))
+    setZ((s) => ({ ...s, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s.zoom + d)) }))
   }, [])
+  const zoomReset = useCallback(() => setZ((s) => ({ ...s, zoom: ZOOM_FIT_BASE })), [])
 
   // ── undo / redo ──
   const undo = useCallback(() => {
@@ -346,7 +394,10 @@ export function useZplEditor(t: TFunction) {
     pushPast()
     setZ((s) => {
       const id = 'z' + s.next
-      const el = patchEl(clip, { id, x: (clip.x || 0) + 24, y: (clip.y || 0) + 24 })
+      // 붙여넣기 오프셋(+24)이 누적돼도 라벨 밖으로 나가지 않게 클램프
+      const { pw, ll } = labelDots(s)
+      const pos = clampToLabel(clip, (clip.x || 0) + 24, (clip.y || 0) + 24, pw, ll)
+      const el = patchEl(clip, { id, ...pos })
       return { ...s, els: [...s.els, el], sel: id, selCell: null, selCells: [], next: s.next + 1 }
     })
   }, [pushPast])
@@ -432,11 +483,33 @@ export function useZplEditor(t: TFunction) {
         if (key === 'font' || key === 'fontW') v = Math.max(10, v) // ^A0 최소 글리프 10dot
         else if (key === 'mag' || key === 'module') v = Math.max(1, Math.min(10, v)) // ^BQ 배율·^BY 모듈 1–10
         else if (key === 'threshold') v = Math.max(0, Math.min(255, v))
-        else if (key === 'maxLines') v = Math.max(1, v)
+        else if (key === 'maxLines') {
+          v = Math.max(1, v)
+          if (target.type === 'text') {
+            const { ll } = labelDots(s)
+            if (ll > 0) {
+              const lineH = textLinePitch(target)
+              v = Math.min(v, Math.max(1, Math.floor((ll - target.y) / lineH)))
+            }
+          }
+        }
         else if (key === 't') v = Math.max(1, v) // ^GB/^GE/^GC/^GD 두께 ≥1
         else if (key === 'border.t') v = Math.max(1, v)
-        else if (key === 'x' || key === 'y' || key === 'border.pad') v = Math.max(0, v)
-        else if (key === 'w' || key === 'h' || key === 'len' || key === 'd') v = Math.max(1, v)
+        // x/y 는 라벨 영역 안으로 하드 클램프 — 상한은 파생 bbox(norm)만큼 뺀 값(드래그와 동일 규칙)
+        else if (key === 'x') {
+          const { pw } = labelDots(s)
+          v = Math.max(0, Math.min(v, Math.max(0, pw - norm(target).w)))
+        } else if (key === 'y') {
+          const { ll } = labelDots(s)
+          v = Math.max(0, Math.min(v, Math.max(0, ll - norm(target).h)))
+        } else if (key === 'border.pad') v = Math.max(0, v)
+        else if (key === 'w' || key === 'h' || key === 'len' || key === 'd') {
+          v = Math.max(1, v)
+          if (key === 'w' && target.type === 'text') {
+            const { pw } = labelDots(s)
+            if (pw > 0) v = Math.min(v, Math.max(40, pw - target.x))
+          }
+        }
       }
       // 문자 제약: ZPL 내장 폰트/^FD 가 출력 가능한 문자만(비ASCII·제어문자 차단)
       if (typeof v === 'string') {
@@ -497,8 +570,8 @@ export function useZplEditor(t: TFunction) {
         if (Math.abs(dx) < 2 && Math.abs(dy) < 2 && !moved) return
         if (!moved) pushPast()
         moved = true
-        const nx = Math.max(0, Math.round(ox + dx))
-        const ny = Math.max(0, Math.round(oy + dy))
+        const { pw, ll } = labelDots(s)
+        const { x: nx, y: ny } = clampToLabel(el, Math.round(ox + dx), Math.round(oy + dy), pw, ll)
         setZ((st) => ({
           ...st,
           dragId: id,
@@ -537,7 +610,8 @@ export function useZplEditor(t: TFunction) {
           pushPast()
           started = true
         }
-        const patch = applyResize(el0, role, dx, dy)
+        const { pw, ll } = labelDots(s)
+        const patch = applyResize(el0, role, dx, dy, pw, ll)
         setZ((st) => ({
           ...st,
           els: st.els.map((x) => (x.id === id ? patchEl(x, patch) : x)),
@@ -560,7 +634,10 @@ export function useZplEditor(t: TFunction) {
       const id = zRef.current.sel
       if (!id) return
       pushPast('nudge')
-      mapEls((els) => els.map((e) => (e.id === id ? patchEl(e, { x: Math.max(0, e.x + dx), y: Math.max(0, e.y + dy) }) : e)))
+      const { pw, ll } = labelDots(zRef.current)
+      mapEls((els) =>
+        els.map((e) => (e.id === id ? patchEl(e, clampToLabel(e, e.x + dx, e.y + dy, pw, ll)) : e)),
+      )
     },
     [mapEls, pushPast],
   )
@@ -733,8 +810,8 @@ export function useZplEditor(t: TFunction) {
           patchZ({ selCell: null, selCells: [] })
         }
         moved = true
-        const nx = Math.max(0, Math.round(ox + dx))
-        const ny = Math.max(0, Math.round(oy + dy))
+        const { pw, ll } = labelDots(s)
+        const { x: nx, y: ny } = clampToLabel(el, Math.round(ox + dx), Math.round(oy + dy), pw, ll)
         setZ((st) => ({
           ...st,
           dragId: id,
@@ -1084,6 +1161,7 @@ export function useZplEditor(t: TFunction) {
     copySel,
     pasteClip,
     zoomBy,
+    zoomReset,
     toggleCode,
     copyZpl,
     resetAll,

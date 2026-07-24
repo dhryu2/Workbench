@@ -4,7 +4,7 @@
 // v2: 이미지 요소는 실제 ^GFA 헥스 데이터를 내보낸다(요소의 gfaHex — image-util.rasterize1bit 산출).
 // 여기서 나온 ZPL 은 Labelary/실프린터에서 캔버스와 동일하게 렌더되어야 하며(WYSIWYG),
 // 입력 문자셋 제약은 sanitize.ts 가 GUI 입력 단계에서 이미 보장한다.
-import { borderBox, dpiFor, toDots, tableW, tableH, mergedRect, isHidden } from './geometry'
+import { borderBox, dpiFor, textLinePitch, toDots, tableW, tableH, mergedRect, isHidden } from './geometry'
 import type { Element, BorderableElement, TableElement, Rotation, ZplLine, ZplState } from './types'
 
 // 회전 코드: 0→N, 90→R, 180→I, 270→B.
@@ -32,12 +32,34 @@ export function borderZpl(el: BorderableElement): string[] {
 export function elZpl(el: Element): string[] {
   switch (el.type) {
     case 'text': {
-      const t = String(el.text || '').split('\n').join('\\&')
       const rot = rotCode(el.rot)
-      const face = el.face || '0'
-      const block = el.block === false ? '' : `^FB${el.w},${el.maxLines || 1},0,${el.align || 'L'}`
+      const font = `^A${el.face || '0'}${rot},${el.font},${el.fontW || el.font}`
+      const lines = String(el.text || '').split('\n')
+      if (el.block === false && lines.length > 1) {
+        // \& 개행은 ^FB 안에서만 유효(실측) — 비-FB 다줄은 줄마다 별도 필드로 내보낸다.
+        // 회전 시 줄 오프셋은 회전축을 따른다(^FO = 회전된 박스 좌상단 규칙과 정합).
+        const pitch = textLinePitch(el)
+        const total = Math.round(pitch * lines.length)
+        // 한 줄의 em 높이 — 글꼴 A 는 9×배율 셀(비-FB 는 gap 없음 → pitch 와 동일)
+        const em = el.face === 'A' ? pitch : el.font
+        const pos = (i: number): [number, number] => {
+          if (el.rot === 90) return [el.x + total - i * pitch - em, el.y]
+          if (el.rot === 180) return [el.x, el.y + total - i * pitch - em]
+          if (el.rot === 270) return [el.x + i * pitch, el.y]
+          return [el.x, el.y + i * pitch]
+        }
+        return [
+          ...lines.map((ln, i) => {
+            const [lx, ly] = pos(i)
+            return `^FO${lx},${ly}${reverseZpl(el)}${font}^FD${ln}^FS`
+          }),
+          ...borderZpl(el),
+        ]
+      }
+      const t = lines.join('\\&')
+      const block = el.block === false ? '' : `^FB${el.w},${el.maxLines || 1},${el.lineGap ?? 0},${el.align || 'L'}`
       return [
-        `^FO${el.x},${el.y}${reverseZpl(el)}^A${face}${rot},${el.font},${el.fontW || el.font}${block}^FD${t}^FS`,
+        `^FO${el.x},${el.y}${reverseZpl(el)}${font}${block}^FD${t}^FS`,
         ...borderZpl(el),
       ]
     }
@@ -70,7 +92,7 @@ export function elZpl(el: Element): string[] {
       ]
     }
     case 'box':
-      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.w},${el.h},${el.t}^FS`]
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.w},${el.h},${el.t}${el.round ? `,,${el.round}` : ''}^FS`]
     case 'ellipse':
       return [`^FO${el.x},${el.y}${reverseZpl(el)}^GE${el.w},${el.h},${el.t}^FS`]
     case 'circle':
@@ -80,7 +102,8 @@ export function elZpl(el: Element): string[] {
         ? [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.t},${el.len},${el.t}^FS`]
         : [`^FO${el.x},${el.y}${reverseZpl(el)}^GB${el.len},${el.t},${el.t}^FS`]
     case 'diagonal':
-      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GD${el.w},${el.h},${el.t},${el.dir || 'L'}^FS`]
+      // 방향은 5번째 파라미터(4번째는 색상) — 4번째에 쓰면 무시되고 기본 R 로 인쇄된다(실측)
+      return [`^FO${el.x},${el.y}${reverseZpl(el)}^GD${el.w},${el.h},${el.t},,${el.dir || 'L'}^FS`]
     case 'table':
       return tableZpl(el)
     default: {
