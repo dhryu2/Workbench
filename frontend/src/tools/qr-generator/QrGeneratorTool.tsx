@@ -1,31 +1,98 @@
 // QR 코드 생성기 도구 화면 — PDA 스캔 테스트용 다중 QR 생성.
 // ① 상단 고정 입력 패널 + ② 스크롤 QR 격자. 측정값/색은 design_handoff_qr_generator/README.md 기준.
+// 격자의 카드는 드래그로 순서를 바꾸거나(끼워넣기) 하단 삭제 영역에 놓아 지울 수 있다.
 import {
   AlertTriangle,
   Check,
   Download,
+  GripVertical,
   Plus,
   QrCode,
   ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react'
+import { useCallback, useMemo, useState, type CSSProperties, type PointerEvent, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Blueprint } from '../../components/Blueprint'
 import { Icon } from '../../lib/icons'
+import { QrTrashZone } from './QrTrashZone'
+import { useQrCardDrag } from './useQrCardDrag'
 import { useQrGenerator, type QrEntry } from './useQrGenerator'
 
 const MONO = 'var(--wb-font-mono)'
 const MUTED_55 = 'color-mix(in srgb, var(--wb-color-text) 55%, transparent)'
 // [추가]/[일괄 생성] 버튼 폭을 동일하게 고정 → 좌측 입력(input)/입력영역(textarea) 폭이 서로 일치.
 const BTN_W = 108
+// 삭제 영역이 떠 있는 동안 마지막 줄 카드가 가려지지 않도록 확보하는 스크롤 여유
+const TRASH_CLEARANCE = 108
+
+// 스크린리더 전용 — 순서 변경 결과를 소리로만 알린다.
+const SR_ONLY: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  margin: -1,
+  padding: 0,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+}
 
 export function QrGeneratorTool() {
   const { t } = useTranslation()
   const qr = useQrGenerator()
+  const [announcement, setAnnouncement] = useState('')
+
+  const ids = useMemo(() => qr.entries.map((e) => e.id), [qr.entries])
+  const byId = useMemo(() => new Map(qr.entries.map((e) => [e.id, e])), [qr.entries])
+
+  const handleReorder = useCallback(
+    (from: number, to: number) => {
+      qr.moveEntry(from, to)
+      setAnnouncement(t('qr_moved', { n: to + 1 }))
+    },
+    [qr, t],
+  )
+
+  const handleDropDelete = useCallback(
+    (id: string) => {
+      qr.removeEntry(id)
+      setAnnouncement(t('qr_deleted'))
+    },
+    [qr, t],
+  )
+
+  const dnd = useQrCardDrag({ ids, onReorder: handleReorder, onDelete: handleDropDelete })
+  const dragging = dnd.drag !== null
+
+  // 격자 컨테이너 ref — 상한 측정(ResizeObserver)과 드래그 좌표 기준을 겸한다.
+  // 두 콜백 모두 안정적이므로 따로 꺼내 의존성으로 쓴다(매 렌더 재부착 방지).
+  const { gridRef } = qr
+  const { scrollRef } = dnd
+  const gridScrollRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      gridRef(el)
+      scrollRef(el)
+    },
+    [gridRef, scrollRef],
+  )
+
+  // 키보드 순서 변경 — 스캔 순서는 선형(#1…#N)이므로 좌/우 한 칸 이동이면 충분하다.
+  const moveByKeyboard = useCallback(
+    (index: number, delta: number) => {
+      const to = index + delta
+      if (to < 0 || to >= ids.length) return
+      handleReorder(index, to)
+    },
+    [ids.length, handleReorder],
+  )
+
+  const draggedEntry = dnd.drag ? byId.get(dnd.drag.id) : undefined
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {/* ① 입력 패널(상단 고정) */}
       <div
         style={{
@@ -175,15 +242,23 @@ export function QrGeneratorTool() {
         )}
       </div>
 
-      {/* ② QR 격자 영역(스크롤) — ref로 크기 측정(상한 산정) */}
+      {/* ② QR 격자 영역(스크롤) — ref로 크기 측정(상한 산정) + 드래그 좌표 기준 */}
       <div
-        ref={qr.gridRef}
+        ref={gridScrollRef}
         className="wb-scroll"
-        style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 34px' }}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: '22px 34px',
+          // 삭제 영역이 떠 있는 동안엔 스크롤 여유만 늘린다(카드 위치는 그대로).
+          paddingBottom: dragging ? 22 + TRASH_CLEARANCE : 22,
+        }}
       >
         {qr.hasEntries ? (
           // minmax(160px,1fr): 최소 160px 보장, 남는 폭은 1fr로 확대(축소 금지)
           <div
+            role="list"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
@@ -191,18 +266,38 @@ export function QrGeneratorTool() {
               alignContent: 'start',
             }}
           >
-            {qr.entries.map((entry, i) => (
-              <QrCard
-                key={entry.id}
-                entry={entry}
-                idx={i + 1}
-                onRemove={() => qr.removeEntry(entry.id)}
-                onDownload={() => qr.download(entry)}
-                removeLabel={t('qr_remove')}
-                downloadLabel={t('qr_download')}
-                errorLabel={t('qr_error')}
-              />
-            ))}
+            {dnd.order.map((id, i) => {
+              const entry = byId.get(id)
+              if (!entry) return null
+              // 끌고 있는 카드는 격자에서 빈 등록 슬롯으로 남고, 실제 카드는 고스트로 뜬다.
+              const isDragged = dnd.drag?.id === id
+              return (
+                <div
+                  key={id}
+                  role="listitem"
+                  ref={dnd.cardRef(id)}
+                  style={{ minWidth: 0 }}
+                >
+                  {isDragged ? (
+                    <Blueprint className="wb-qr-slot" style={{ height: dnd.drag?.height }} aria-hidden={true} />
+                  ) : (
+                    <QrCard
+                      entry={entry}
+                      idx={i + 1}
+                      total={dnd.order.length}
+                      onPointerDown={(e) => dnd.onCardPointerDown(id, i, e)}
+                      onMove={(delta) => moveByKeyboard(i, delta)}
+                      onRemove={() => qr.removeEntry(entry.id)}
+                      onDownload={() => qr.download(entry)}
+                      gripLabel={t('qr_reorder')}
+                      removeLabel={t('qr_remove')}
+                      downloadLabel={t('qr_download')}
+                      errorLabel={t('qr_error')}
+                    />
+                  )}
+                </div>
+              )
+            })}
           </div>
         ) : (
           // 빈 상태(항목 0개)
@@ -234,6 +329,44 @@ export function QrGeneratorTool() {
           </div>
         )}
       </div>
+
+      {/* ③ 삭제 영역 — 드래그 중에만 격자 위에 떠오른다 */}
+      {dragging && (
+        <QrTrashZone
+          ref={dnd.trashRef as Ref<HTMLDivElement>}
+          armed={dnd.drag?.overTrash === true}
+          idleLabel={t('qr_trash_idle')}
+          armedLabel={t('qr_trash_armed')}
+        />
+      )}
+
+      {/* ④ 손끝을 따라다니는 고스트 카드 */}
+      {dnd.drag && draggedEntry && (
+        <div
+          className={dnd.drag.overTrash ? 'wb-qr-ghost is-doomed' : 'wb-qr-ghost'}
+          style={{
+            left: dnd.drag.x - dnd.drag.offsetX,
+            top: dnd.drag.y - dnd.drag.offsetY,
+            width: dnd.drag.width,
+          }}
+          aria-hidden={true}
+        >
+          <QrCard
+            entry={draggedEntry}
+            idx={dnd.drag.overIndex + 1}
+            total={dnd.order.length}
+            gripLabel={t('qr_reorder')}
+            removeLabel={t('qr_remove')}
+            downloadLabel={t('qr_download')}
+            errorLabel={t('qr_error')}
+          />
+        </div>
+      )}
+
+      {/* 순서 변경/삭제 결과 알림(스크린리더 전용) */}
+      <span role="status" aria-live="polite" style={SR_ONLY}>
+        {announcement}
+      </span>
     </div>
   )
 }
@@ -241,33 +374,83 @@ export function QrGeneratorTool() {
 interface QrCardProps {
   entry: QrEntry
   idx: number // 1부터 시작하는 순번(스캔 순서 식별)
-  onRemove: () => void
-  onDownload: () => void
+  total: number
+  onPointerDown?: (e: PointerEvent<HTMLDivElement>) => void
+  onMove?: (delta: -1 | 1) => void
+  onRemove?: () => void
+  onDownload?: () => void
+  gripLabel: string
   removeLabel: string
   downloadLabel: string
   errorLabel: string
 }
 
-// 격자 셀 1개 — 헤더 바 / 흰 바탕 QR 이미지 영역 / 라벨 + 다운로드 바.
-function QrCard({ entry, idx, onRemove, onDownload, removeLabel, downloadLabel, errorLabel }: QrCardProps) {
+// 격자 셀 1개 — 그립 + 헤더 바 / 흰 바탕 QR 이미지 영역 / 라벨 + 다운로드 바.
+function QrCard({
+  entry,
+  idx,
+  total,
+  onPointerDown,
+  onMove,
+  onRemove,
+  onDownload,
+  gripLabel,
+  removeLabel,
+  downloadLabel,
+  errorLabel,
+}: QrCardProps) {
   const url = typeof entry.dataUrl === 'string' ? entry.dataUrl : null // 완료 시 PNG data URL
   const loading = entry.dataUrl === null
   const error = entry.dataUrl === false
   const done = url !== null
 
   return (
-    <Blueprint style={{ display: 'flex', flexDirection: 'column', background: 'var(--wb-color-bg)' }}>
-      {/* 헤더 바: #순번 + 개별 삭제(×) */}
+    <Blueprint
+      className="wb-qr-card"
+      onPointerDown={onPointerDown}
+      style={{ display: 'flex', flexDirection: 'column', background: 'var(--wb-color-bg)' }}
+    >
+      {/* 헤더 바: 그립 + #순번 + 개별 삭제(×) */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '6px 8px 6px 10px',
+          gap: 4,
+          padding: '6px 8px 6px 5px',
           borderBottom: '1px solid var(--wb-color-divider)',
         }}
       >
+        {/* 그립 — 드래그 가능함을 알리는 표식이자 키보드 순서 변경의 진입점(←/→ 한 칸) */}
+        <button
+          type="button"
+          className="wb-qr-grip"
+          title={gripLabel}
+          aria-label={`${gripLabel} — ${idx}/${total}`}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault()
+              onMove?.(-1)
+            } else if (e.key === 'ArrowRight') {
+              e.preventDefault()
+              onMove?.(1)
+            }
+          }}
+          style={{
+            width: 20,
+            height: 26,
+            flex: 'none',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            cursor: 'grab',
+          }}
+        >
+          <Icon icon={GripVertical} size={14} />
+        </button>
         <span style={{ fontFamily: MONO, fontSize: 12, color: MUTED_55 }}>#{idx}</span>
+        <div style={{ flex: 1 }} />
         <button
           type="button"
           onClick={onRemove}
@@ -293,7 +476,14 @@ function QrCard({ entry, idx, onRemove, onDownload, removeLabel, downloadLabel, 
 
       {/* QR 이미지 영역 — 흰 바탕은 quiet zone 대비 필수 */}
       <div style={{ background: '#ffffff', padding: 14, display: 'grid', placeItems: 'center' }}>
-        {done && <img src={url} alt={entry.text} style={{ width: '100%', height: 'auto', display: 'block' }} />}
+        {done && (
+          <img
+            src={url}
+            alt={entry.text}
+            draggable={false} // 네이티브 이미지 드래그가 포인터 드래그를 가로채지 않게
+            style={{ width: '100%', height: 'auto', display: 'block' }}
+          />
+        )}
         {loading && (
           <div
             aria-hidden={true} // 로딩 '…'은 장식 — SR에는 숨김(완료/실패만 인식되게)
@@ -324,7 +514,7 @@ function QrCard({ entry, idx, onRemove, onDownload, removeLabel, downloadLabel, 
               gap: 8,
               padding: 10,
               textAlign: 'center',
-              color: '#8a3a3a',
+              color: 'var(--wb-color-danger)',
               fontSize: 12,
               fontFamily: 'var(--wb-font-body)',
             }}

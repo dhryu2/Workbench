@@ -95,6 +95,18 @@ export function useQrGenerator() {
     setLastOverflow(0)
   }, [])
 
+  // 순서 변경 — from 항목을 빼내 to 위치에 끼워넣는다(사이 항목들은 밀림).
+  // 카드 머리의 #순번은 배열 인덱스에서 파생되므로 이동 즉시 스캔 순서가 다시 매겨진다.
+  const moveEntry = useCallback((from: number, to: number) => {
+    setEntries((prev) => {
+      if (from === to || from < 0 || to < 0 || from >= prev.length || to >= prev.length) return prev
+      const next = prev.slice()
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }, [])
+
   // 전체 삭제 — 진행 중 집합 비우고 항목/오버플로우 리셋
   const clearAll = useCallback(() => {
     pendingRef.current = new Set()
@@ -213,6 +225,7 @@ export function useQrGenerator() {
     toggleTrim,
     clearAll,
     removeEntry,
+    moveEntry,
     download,
     gridRef,
   }

@@ -43,6 +43,12 @@
   --wb-color-accent-2-800: #314457;
   --wb-color-accent-2-900: #1f2d3a;
 
+  /* ── 위험(파괴적 동작) ── 유일한 비-액센트 의미색. 순수 빨강 대신
+     산업 팔레트에 맞는 탁한 벽돌톤. 삭제 영역·인코딩 실패 표시에만 쓴다. */
+  --wb-color-danger: #8a3a3a;
+  --wb-color-danger-100: #f6ecec;
+  --wb-color-danger-700: #6d2c2c;
+
   /* ── 타이포 ── */
   --wb-font-heading: "Barlow Condensed", system-ui, sans-serif;
   --wb-font-heading-weight: 600;

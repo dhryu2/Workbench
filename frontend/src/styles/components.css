@@ -28,6 +28,131 @@
   color: var(--wb-color-accent-700);
 }
 
+/* ── QR 생성기 — 드래그 재정렬 ── */
+
+/* 드래그 중 전역 상태: 커서 통일 + 텍스트 선택 차단(카드 라벨이 잡히지 않게) */
+body.wb-qr-dragging,
+body.wb-qr-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* 카드 — 잡을 수 있음을 커서로 알리고, 터치는 길게 누르기로만 드래그하므로
+   touch-action은 기본값을 유지해 격자 스크롤을 막지 않는다. */
+.wb-qr-card {
+  cursor: grab;
+}
+
+/* 드래그 핸들(그립) — 평소엔 조용히, 카드 hover 시 또렷해진다 */
+.wb-qr-grip {
+  color: color-mix(in srgb, var(--wb-color-text) 28%, transparent);
+  transition: color 0.12s;
+}
+.wb-qr-card:hover .wb-qr-grip {
+  color: color-mix(in srgb, var(--wb-color-text) 62%, transparent);
+}
+.wb-qr-grip:focus-visible {
+  color: var(--wb-color-accent);
+}
+
+/* 손끝을 따라다니는 고스트 — 도면에서 들어올린 부품 */
+.wb-qr-ghost {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border-color: var(--wb-color-accent);
+  box-shadow: var(--wb-shadow-lg);
+  transition: opacity 0.12s, border-color 0.12s;
+}
+/* 휴지통 조준 중 — 고스트가 폐기 대상임을 색으로 예고 */
+.wb-qr-ghost.is-doomed {
+  border-color: var(--wb-color-danger);
+  opacity: 0.75;
+}
+
+/* 원래 자리에 남는 빈 등록 슬롯 — 점선 프레임만 남긴다 */
+.wb-qr-slot {
+  border-style: dashed;
+  border-color: var(--wb-color-accent);
+  background: color-mix(in srgb, var(--wb-color-accent) 7%, transparent);
+}
+
+/* ── QR 생성기 — 삭제 영역(SCRAP BAY) ── */
+.wb-qr-trash {
+  position: absolute;
+  left: 34px;
+  right: 34px;
+  bottom: 22px;
+  z-index: 55;
+  height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none; /* 히트 판정은 JS가 rect로 한다 — 포인터 이벤트를 가로채지 않게 */
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--wb-color-danger) 55%, transparent);
+  background: color-mix(in srgb, var(--wb-color-bg) 92%, transparent);
+  backdrop-filter: blur(3px);
+  color: var(--wb-color-danger);
+  transition: border-color 0.14s, background 0.14s, transform 0.14s;
+  animation: wb-qr-trash-rise 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.wb-qr-trash > .wb-corner {
+  color: color-mix(in srgb, var(--wb-color-danger) 65%, transparent);
+}
+
+/* 조준됨 — 실선 + 45° 해칭(제도 도면에서 "제거될 재료" 표기) */
+.wb-qr-trash.is-armed {
+  border-style: solid;
+  border-color: var(--wb-color-danger);
+  color: var(--wb-color-danger-700);
+  transform: translateY(-2px);
+  background:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--wb-color-danger) 14%, transparent) 0 7px,
+      transparent 7px 14px
+    ),
+    var(--wb-color-danger-100);
+}
+.wb-qr-trash.is-armed > .wb-corner {
+  color: var(--wb-color-danger);
+}
+
+.wb-qr-trash-icon {
+  display: flex;
+  transition: transform 0.14s;
+}
+.wb-qr-trash.is-armed .wb-qr-trash-icon {
+  transform: scale(1.15);
+}
+.wb-qr-trash-label {
+  font-family: var(--wb-font-heading);
+  font-weight: var(--wb-font-heading-weight);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@keyframes wb-qr-trash-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 모션 최소화 선호 시 — 등장/이동 연출은 끄고 상태 색만 남긴다 */
+@media (prefers-reduced-motion: reduce) {
+  .wb-qr-trash,
+  .wb-qr-trash.is-armed,
+  .wb-qr-trash-icon,
+  .wb-qr-ghost {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+  .wb-qr-trash.is-armed .wb-qr-trash-icon { transform: none; }
+}
+
 /* ── ZPL 에디터 ── */
 /* 회전 스피너 — 미리보기(Labelary) 로딩 아이콘 */
 @keyframes wb-spin {
