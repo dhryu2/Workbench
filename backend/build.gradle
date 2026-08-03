@@ -20,6 +20,8 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	runtimeOnly 'com.h2database:h2'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -32,4 +34,11 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// H2 CLI(Shell)를 컨테이너 안에서 직접 실행하려면 fat jar 안에 nested된 h2 jar가 아닌
+// 별도 파일로 뽑아낸 h2 jar가 필요하다
+tasks.register('copyH2Jar', Copy) {
+	from configurations.runtimeClasspath.filter { it.name.startsWith('h2-') }
+	into layout.buildDirectory.dir('h2-jar')
 }

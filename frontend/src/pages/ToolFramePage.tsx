@@ -1,10 +1,12 @@
 // 도구 진입 프레임(`/tools/:toolId`) — 브레드크럼 + 타이틀 행 + 도구 콘텐츠.
 // 콘텐츠는 레지스트리(TOOL_COMPONENTS)에 등록된 전용 화면을, 미등록 도구는 공통 placeholder를 렌더한다.
 import { ArrowLeft } from 'lucide-react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { categoryName, toolById } from '../data/catalog'
 import { Icon, ToolIcon } from '../lib/icons'
+import { postToolUsage } from '../lib/api'
 import { TOOL_COMPONENTS } from '../tools/registry'
 import { ToolPlaceholder } from './ToolPlaceholder'
 import { useLang } from '../lib/useLang'
@@ -15,6 +17,13 @@ export function ToolFramePage() {
   const navigate = useNavigate()
   const { toolId } = useParams()
   const tool = toolId ? toolById(toolId) : undefined
+
+  // 도구가 바뀔 때마다(=도구 진입 시) 사용 횟수 집계.
+  // 이 이펙트는 아래 `!tool` 조기 반환보다 먼저 등록되므로, 카탈로그에 없는 id로도 실행된다.
+  // 그대로 두면 누구나 /tools/<아무거나> 로 임의의 scopeKey 행을 만들 수 있어 반드시 tool로 가드한다.
+  useEffect(() => {
+    if (tool) postToolUsage(tool.id)
+  }, [tool])
 
   // 존재하지 않는 도구 id → 런처로
   if (!tool) return <Navigate to="/" replace />

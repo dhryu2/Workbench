@@ -20,8 +20,11 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: ${BACKEND_CONTAINER_PORT:-23001}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      DB_FILE_PATH: /app/data/workbench
     expose:
       - "${BACKEND_CONTAINER_PORT:-23001}"
+    volumes:
+      - backend-data:/app/data
     networks:
       - workbench
 
@@ -46,3 +49,6 @@ services:
 networks:
   workbench:
     driver: bridge
+
+volumes:
+  backend-data:

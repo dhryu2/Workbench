@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom'
 import { CommandPalette } from './CommandPalette'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { postVisit } from '../lib/api'
 import { useWorkbench } from '../lib/workbench-context'
 
 export function AppShell() {
@@ -20,6 +21,11 @@ export function AppShell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [togglePalette])
+
+  // 앱 셸 마운트 시 1회 방문 카운트 집계
+  useEffect(() => {
+    postVisit()
+  }, [])
 
   return (
     <div

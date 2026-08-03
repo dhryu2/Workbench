@@ -81,6 +81,9 @@ out/
 # Spring / app runtime
 *.pid
 
+# H2 파일 DB(로컬 개발 시 backend/data/에 생성됨) — 커밋 대상 아님
+backend/data/
+
 # keep the Gradle wrapper
 !gradlew
 !gradlew.bat
